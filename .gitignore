@@ -1,0 +1,17 @@
+# 本地专用（设计草稿、备份等，不入库）
+/_local_only/
+
+# 构建产物
+*.exe
+*.dll
+*.so
+*.o
+*.a
+*.ll
+
+# 临时
+/_tmp/
+
+# 系统文件
+Thumbs.db
+.DS_Store

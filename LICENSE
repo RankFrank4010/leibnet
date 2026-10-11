@@ -1,0 +1,804 @@
+TIE PUBLIC LICENSE
+Version 2.3
+
+Copyright (c) <year> <name of copyright holder>. All rights reserved.
+
+This License may be referred to by its short name "TPL" (e.g., "TPL 2.3").
+
+This License text is published by the TIE-LANG organization as a generic,
+reusable open source license. It may be adopted by any individual or legal
+entity (a "Licensor") that distributes or makes available work under this
+License, without any affiliation to, or endorsement by, the TIE-LANG
+organization.
+
+PREAMBLE
+
+The Tie Public License is a permissive, attribution-based open source license
+for works of any kind — software, documents, fonts, datasets, media, models,
+hardware designs, or anything else. It is general-purpose and field-of-use
+neutral: anyone may adopt it for any kind of work, and anyone may use licensed
+works for any purpose.
+
+Its principles: the Licensed Material may be used, copied, modified, and
+redistributed by anyone, for any purpose, subject only to the conditions of
+this License (Permission); attribution and notice obligations protect the
+Licensor, Contributors, and every rightsholder in the distribution chain, and
+the goodwill of names and marks is protected by the trademark provisions
+(Attribution); works that You author for or with the Licensed Material are
+Your own — this License governs the Licensed Material itself, not what You
+build with it (User Works); the rights of third parties whose assets accompany
+the Licensed Material are respected, and their notices pass through with every
+copy (Third parties); and the grants extend to everyone, everywhere, for every
+kind of use (Universality).
+
+By using, copying, modifying, contributing to, or distributing any portion of
+the Licensed Material, You agree to be bound by the terms and conditions of
+this License. If You do not agree, You are not authorized to use, copy, modify,
+or distribute the Licensed Material.
+
+SECTION 1 - DEFINITIONS
+
+For the purposes of this License, the following terms have the meanings set out
+below. Terms defined in the singular include the plural, and vice versa, where
+the context so requires.
+
+1.1 "Licensed Material" means, collectively, any works, materials, or other
+subject matter of any kind — including but not limited to programs and libraries, documentation, source
+and object forms, examples, sample data, datasets, configuration files, build
+scripts, media files, fonts, models, hardware designs, and graphical assets
+(including logos and artwork) — that are
+(a) created by or on behalf of the Licensor, and (b) distributed or made
+available by the Licensor under this License.
+
+1.2 "Licensor" means the individual or legal entity, including its heirs,
+successors, and assigns, that owns the rights in the Licensed Material and
+distributes or makes it available under this License.
+
+1.3 "You" (and the corresponding possessive form "Your") means the individual
+or legal entity exercising permissions granted by this License.
+
+1.4 "Source Form" means the preferred form of the Licensed Material for making
+modifications to it, together with any associated definition files, scripts,
+configuration, and documentation that are part of that form. The Source Form
+differs by the nature of the work: for a program it is typically its source
+code and build files; for a font or graphic, its vector or source design files;
+for a document, its text or markup source; for a dataset, the curated data
+together with its preparation process; for a model, its training definitions
+and configurations; for a hardware design, its design files. Where the
+Licensed Material is made available in more than one form, the Source Form is
+the form identified as such by the Licensor or, absent such identification,
+the preferred form for making modifications.
+
+1.5 "Object Form" means any form of the Licensed Material that is not Source
+Form, including forms produced by compilation, rendering, export, generation,
+minification, aggregation, or any other mechanical transformation or
+translation of Source Form, whether in whole or in part.
+
+1.6 "Derivative Work" means any work — whether in Source Form or Object Form —
+that is based upon, derives from, or incorporates a portion of the Licensed
+Material, whether verbatim or with modifications, translations, adaptations,
+extensions, insertions, deletions, or other changes. A Derivative Work includes
+only the portions thereof that originate in, or are modifications or
+adaptations of, the Licensed Material, and does not include separate and
+independent works, or works merely aggregated with the Licensed Material. A
+User Work that does not incorporate or reproduce Licensed Material in Source
+Form is not a Derivative Work.
+
+1.7 "User Work" means any work of authorship — including but not limited to
+programs, applications, scripts, documents, datasets, fonts, designs, media,
+models, and other creative or functional works — that You author, create,
+produce, or generate for or with the Licensed Material, where such work is not
+the Licensed Material itself and does not incorporate or reproduce the
+Licensed Material in Source Form. For clarity:
+
+  (a) a work may be a User Work whether or not it is authored by a human
+      being, and includes works authored, generated, or rendered with the aid
+      of the Licensed Material, including works generated by artificial
+      intelligence systems or machine learning models used for or with the
+      Licensed Material;
+
+  (b) the fact that a User Work is authored, built, compiled, run, rendered,
+      hosted, or otherwise materially used together with the Licensed Material
+      — for example, a program written in a language distributed under this
+      License, an application built upon a library, a document typeset with
+      such tools, a font rendered in a game, or a model trained with such a
+      library — does not, by itself, make that User Work a Derivative Work of
+      the Licensed Material; and
+
+  (c) a User Work does not include a file of the Licensed Material itself, or
+      a modification of such a file, even if distributed as part of a User
+      Work.
+
+1.8 "Contribution" means any work of authorship, including any modification or
+addition to the Licensed Material, that is intentionally submitted by You or by
+any third party to the Licensor for inclusion in the Licensed Material.
+"Submitted" means any form of electronic, verbal, or written communication sent
+to the Licensor or its representatives, including communication on mailing
+lists, version control systems, issue tracking systems, review systems, or
+documentation, that is intended by the sender to be considered for inclusion
+in the Licensed Material.
+
+1.9 "Contributor" means any individual or legal entity that makes a
+Contribution.
+
+1.10 "Brand Mark" means the names, word marks, logos, graphic devices, trade
+dress, service marks, and other identifying designations that the Licensor
+owns or controls and uses to identify the Licensed Material, the Licensor, or
+the family of products and services offered by the Licensor. Where the
+Licensor distributes a notice file under Section 5.7, the Brand Mark includes
+the identifying designations designated in such notice file, but nothing in
+this License grants any rights in any mark not expressly designated or owned
+by the Licensor.
+
+1.11 "Distribution" (and the verb "Distribute") means any act of making the
+Licensed Material or Derivative Works available to any third party by any
+means, including but not limited to sale, offer for sale, license, sublicense,
+transfer, conveyance, publication, uploading to a network, repository, or
+marketplace, inclusion in a compilation or aggregate work, public display,
+public performance, or provision as a hosted or managed service.
+
+1.12 "Applicable Law" means the laws and regulations of the jurisdiction in
+which the relevant rights and obligations under this License are to be
+enforced, as determined in accordance with Section 12, together with any
+mandatory provisions of the laws of other jurisdictions that cannot be
+excluded.
+
+1.13 "Third-Party Material" means any work, component, dataset, font, model,
+media file, or other asset that (a) is neither the Licensed Material nor a
+Contribution; (b) is owned, licensed, or controlled by a person or entity
+other than the Licensor or any Contributor; and (c) is bundled with, embedded
+in, or made available together with the Licensed Material, whether identified
+in a notice file, a third-party asset manifest (however titled, such as
+"THIRD-PARTY-NOTICES" or "CREDITS"), or accompanying documentation.
+
+1.14 "Third-Party Rightsholder" means the person or legal entity that owns or
+holds rights in Third-Party Material.
+
+1.15 "Affiliate" means, with respect to a party, any legal entity that
+directly or indirectly controls, is controlled by, or is under common control
+with that party, where "control" means the ownership of more than fifty
+percent (50%) of the voting interests of the entity, or the power to direct or
+cause the direction of its management and policies.
+
+SECTION 2 - GRANTS OF COPYRIGHT AND DATABASE RIGHTS
+
+Subject to the terms and conditions of this License, the Licensor and each
+Contributor hereby grant to You a perpetual, worldwide, non-exclusive,
+royalty-free, irrevocable (except as expressly provided in Section 11)
+copyright license, and, to the extent database rights (including sui generis
+database rights) subsist in the Licensed Material under Applicable Law, a
+database rights license, to:
+
+2.1 Reproduce and Use — reproduce, use, run, execute, display, perform, and
+otherwise utilize the Licensed Material, in whole or in part, in any medium,
+format, or context, for any purpose whatsoever, whether commercial or
+non-commercial, and in any field of endeavor, regardless of the identity,
+affiliation, or location of the user;
+
+2.2 Modify — modify, translate, adapt, transform, port, and otherwise prepare
+Derivative Works of the Licensed Material;
+
+2.3 Distribute — Distribute, sell, offer for sale, sublicense, publicly
+display, publicly perform, and otherwise transfer copies of the Licensed
+Material and Derivative Works thereof, in Source Form or Object Form, through
+any channel of Distribution; and
+
+2.4 Relicense — subject to the conditions of Section 5, grant further licenses
+to the Licensed Material and Derivative Works thereof under any terms You
+choose, including the terms of other licenses, provided that no such grant is
+used to evade or circumvent the conditions and obligations that this License
+imposes upon You.
+
+2.5 Nature of the Grant — This License is expressly permissive with respect to
+Licensed Material in Source Form. You are not required to disclose, publish,
+or release the source of Your Derivative Works, and You are free to
+incorporate the Licensed Material into proprietary, commercial, and
+closed-source products, provided that You comply with the attribution
+requirements of Section 5. The grants under this Section are made in addition
+to, and do not limit, any exceptions and limitations to copyright that
+Applicable Law provides, including without limitation fair use, fair dealing,
+and permitted quotation.
+
+2.6 Universal Grant — The grants in this License extend to every person and
+legal entity, without limitation by number, identity, affiliation, geography,
+or field of endeavor, and to every kind of use of the Licensed Material and
+Derivative Works thereof. No use case, field of use, or category of user is
+excluded except as expressly provided in this License.
+
+2.7 Commercial Licensing Reservation — Nothing in this License prevents the
+Licensor from offering, under separate terms, licenses or waivers of any of
+the conditions of this License (a "Commercial License"), including in exchange
+for a fee or other consideration. The availability of the Licensed Material
+under this License does not exhaust, limit, or waive the Licensor's right to
+grant such Commercial Licenses, and You acquire no right to require, price, or
+dictate the terms of any such Commercial License.
+
+2.8 Database Rights — Where database rights subsist in the Licensed Material
+or its contents, the database rights license granted by this Section entitles
+You to extract, reuse, reproduce, and Distribute all or a substantial part of
+the contents of the Licensed Material, subject to and in accordance with
+Sections 5 and 6, on the same footing as the copyright license granted under
+this Section.
+
+2.9 Moral Rights — To the fullest extent permitted by Applicable Law, and
+solely to the extent the Licensor holds moral rights in the Licensed Material,
+the Licensor waives, and agrees not to assert, such rights (including rights
+of attribution and integrity) against You in connection with the exercise of
+the rights granted under this License, except that the attribution and notice
+obligations of Section 5 remain in full force.
+
+SECTION 3 - GRANT OF PATENT LICENSE
+
+3.1 Grant — Subject to the terms and conditions of this License, the Licensor
+and each Contributor grant to You a perpetual, worldwide, non-exclusive,
+royalty-free, irrevocable (except as expressly provided in Sections 3.3 and
+11) patent license to make, have made, use, offer to sell, sell, import, and
+otherwise exploit the Licensed Material and Derivative Works, where such
+patent claims are necessarily infringed by the Licensed Material as
+Distributed by the Licensor, or by the making, using, or selling of a
+Derivative Work as such, and where the party granting the license owns or
+controls the patent claims or has the right to grant them. This grant applies
+only to patent claims owned or controlled by the Licensor or a Contributor
+that were already held at the time of Distribution of the Licensed Material to
+which the claim relates, or acquired after that time except for patent claims
+acquired in connection with a transfer of a work that itself infringes the
+patent claims in question.
+
+3.2 No Implied Patent License — Subject to and except as expressly provided in
+Section 3.1, this License does not grant, and shall not be deemed to grant, by
+implication, estoppel, or otherwise, any patent license under any patent owned
+or controlled by the Licensor or any Contributor, whether arising from the
+License, the Distribution of the Licensed Material, the use of any Derivative
+Work, or any commercial arrangement.
+
+3.3 Retaliatory Termination for Intellectual Property Claims — If You, or any
+of Your Affiliates, initiate (directly or through a third party acting on Your
+or their behalf) a claim, suit, or proceeding alleging that the Licensed
+Material, a Contribution, or a Derivative Work infringes a patent owned or
+controlled by You or any of Your Affiliates, then the patent license granted
+under Section 3.1 shall terminate as of the date such claim, suit, or
+proceeding is filed, except that such termination shall not apply where the
+claim, suit, or proceeding is in response to a prior patent claim, suit, or
+proceeding initiated against You, Your Affiliates, or Your products by the
+Licensor or a Contributor, or where it is directed against a party that has
+already filed such a response. This Section 3.3 does not affect the copyright
+and database rights licenses granted under Section 2.
+
+SECTION 4 - USER WORKS, LINKING, AND ARTIFICIAL INTELLIGENCE
+
+4.1 Ownership — User Works that You create for or with the Licensed Material
+are Your own works. Except to the extent that such User Works incorporate or
+reproduce Licensed Material in Source Form as provided in Section 5, this
+License grants no rights in, and imposes no obligations with respect to, Your
+User Works.
+
+4.2 No Attribution on User Works — You are not required to include any
+copyright notice, license text, attribution statement, trademark, or link to
+this License in, or in connection with, any User Work that You create for or
+with the Licensed Material, provided that such User Work does not incorporate
+or reproduce Licensed Material in Source Form.
+
+4.3 No Copyleft — Nothing in this License requires You to license, publish,
+disclose, or release the source of Your User Works or Derivative Works under
+this License or under any other license, and no act of receiving or using the
+Licensed Material shall be construed as a consent to any obligation to do so.
+
+4.4 Artificial Intelligence and Machine Learning — For the purposes of this
+Section, "substantial portions" of the Licensed Material means a portion
+that, assessed qualitatively or quantitatively, is significant in relation to
+the Licensed Material as a whole, or the extraction or redistribution of
+which would prejudice the legitimate interests of the Licensor, having regard
+to the nature and scope of the Licensed Material, in line with the
+substantial-part standard of EU database law (Directive 96/9/EC, Article 7,
+as interpreted by the Court of Justice of the European Union).
+
+  (a) the reproduction of the Licensed Material for the purpose of training,
+      fine-tuning (including reinforcement learning from human or automated
+      feedback, low-rank and other parameter-efficient adaptation, and
+      knowledge distillation), evaluating, or otherwise improving a machine
+      learning model or artificial intelligence system (a "Model") constitutes
+      a use and reproduction of the Licensed Material permitted under Section
+      2, subject to the notice obligations of Section 5.1 with respect to any
+      retained copy of Licensed Material in Source Form;
+
+  (b) the weights, parameters, and other learned artifacts of a Model so
+      trained ("Model Weights") are not Object Form, not Derivative Works, and
+      not Licensed Material, and constitute a User Work of the party that
+      trained the Model within the meaning of Section 1.7. The same applies to
+      the artifacts of Models fine-tuned, adapted, or merged on the basis of
+      such a Model, and to any further Models derived therefrom;
+
+  (c) output generated by a Model is a User Work of the person or entity that
+      generates it, whether or not the Model was trained on the Licensed
+      Material, and shall not, by that fact alone, be deemed a Derivative Work
+      of the Licensed Material or subject to the conditions of this License;
+      provided that, to the extent an output incorporates or reproduces
+      Licensed Material in Source Form or substantial portions thereof, that
+      portion remains subject to Section 5; and
+
+  (d) no attribution, notice, or license obligation under this License
+      attaches to Model outputs by reason of training alone.
+
+  (e) the generation of embeddings, vector indexes, retrieval indices, or
+      statistical summaries of or based upon the Licensed Material is a use
+      permitted under Section 2, and such artifacts are not Licensed Material,
+      not Object Form, and not Derivative Works, and constitute a User Work of
+      the party that generated them; provided that the
+      redistribution of substantial verbatim portions of the Licensed Material
+      obtained through, or reproduced within, such artifacts remains subject
+      to Sections 2 and 4; and
+
+  (f) the creation, execution, and publication of benchmarks, evaluations,
+      comparisons, or studies of or relating to the Licensed Material is
+      permitted under Section 2, and the results thereof are User Works; and
+
+  (g) nothing in this Section 4.4 limits, or constitutes a defense to, the
+      application of trademark law, unfair competition, passing-off, or
+      misappropriation law (to the extent not preempted by copyright law) to
+      conduct in connection with the training, evaluation, or use of a Model,
+      including the naming, branding, or marketing of Models or their outputs;
+      such laws apply according to their own terms, subject to the
+      nominative-use permissions of Section 8.
+
+4.5 Linking and Interfaces — Incorporating the Licensed Material into a
+combined work by linking (whether static or dynamic), communicating over an
+application programming interface or protocol, loading or being loaded as a
+module or plugin, executing under a runtime, interpreter, or compiler
+Distributed under this License, or exchanging data in the formats of the
+Licensed Material does not, by itself, make the combined work — or any portion
+thereof that originates in Your own work — a Derivative Work of the Licensed
+Material. Such independent portions are User Works within the meaning of
+Section 1.7, and no conditions of this License attach to them, except that any
+portion of the combined work that incorporates or reproduces Licensed Material
+in Source Form, or constitutes a modification of a file of the Licensed
+Material, remains subject to Section 5. Declaring an interface, format, or
+protocol compatible with those of the Licensed Material, and implementing such
+a compatible interface, does not by itself make the implementing work a
+Derivative Work.
+
+SECTION 5 - CONDITIONS OF USE AND DISTRIBUTION
+
+5.1 Retention of Notices — Mandatory. Every use, reproduction, or Distribution
+of the Licensed Material must retain, in each copy or substantial part thereof,
+all copyright, trademark, attribution, and other legal notices contained in or
+accompanying the Licensed Material as Distributed to You, in the form in which
+they appear.
+
+5.2 Redistribution in Source Form — When You Distribute Licensed Material in
+Source Form, You must, with each copy, retain the notices required by Section
+4.1 and either include a copy of this License or provide a conspicuous
+reference (such as a link) to its complete text.
+
+5.3 Redistribution in Object Form — When You Distribute Licensed Material in
+Object Form, whether incorporated into a larger work or not, You must do one
+of the following: (a) accompany the Object Form with the Source Form; (b)
+provide a written offer, valid for at least three years, to provide the Source
+Form; or (c) where the Object Form was Distributed to You pursuant to
+subdivision (b), provide a reference to the source from which it can be
+obtained. In each case, the required notices of Section 5.1 must be retained.
+
+5.4 Marking of Modifications — Best Effort. Where You modify a file of the
+Licensed Material in Source Form, You must make a best effort to indicate in
+that file that it has been modified from the original, provided that such
+marking does not conflict with the notices retained under Section 5.1.
+
+5.5 No Additional Restrictions — You may not impose, offer, or attempt to
+impose, whether as a condition of Distribution or otherwise, any term that
+restricts, or that purports to restrict, the rights granted to any recipient
+under this License, or that requires any recipient to agree to additional
+terms beyond those of this License as a condition of exercising such rights.
+This Section does not prevent You from accepting, in a separate agreement,
+obligations beyond those required by this License.
+
+5.6 No Endorsement — The use of the Licensed Material does not imply, and
+shall not be presented as implying, any endorsement, sponsorship,
+certification, or affiliation by or with the Licensor, except as expressly
+permitted under Section 8.
+
+5.7 Notice File — Optional. The Licensor may, at its option, Distribute a
+notice file (however titled, such as "NOTICE") containing additional
+attributions, designations, or legal notices. Where such a notice file is
+Distributed with the Licensed Material, any Derived Work that You Distribute
+must include a readable copy of the attribution notices contained in it,
+restricted to those applicable to the parts of the Derivative Work that
+incorporate the Licensed Material, in one of the following places: within the
+Derivative Work itself, in a file accompanying it, or in a location
+conspicuously accessible to its recipients.
+
+5.8 Hosted Services — Where the Licensed Material or a Derivative Work thereof
+is made available as a hosted or managed service within the meaning of Section
+1.11, the obligations of Sections 5.1 to 5.3 are deemed satisfied if the
+copyright notices described in Section 5.1 and either a copy of, or a direct
+reference (such as a link) to, the complete text of this License are made
+readily accessible to the users of such service, for example in the service
+documentation, an "about" page, or the terms of service. Nothing in this
+Section 5.8 imposes on You any obligation to disclose the source of the
+service or of any Derivative Work operated as a hosted service.
+
+5.9 Conspicuous Attribution — Where You incorporate Licensed Material in
+Source Form, or Derivative Works thereof, into a product that is Distributed
+to end users, the notices required by Sections 5.1 to 5.3 must be presented in
+a form that is reasonably conspicuous and accessible to the recipients of the
+product, including, where the product provides an "About", "Credits", "Legal
+Notices", or similar section, by inclusion in that section. Placement solely
+in machine-readable files, installer logs, or other locations not reasonably
+accessible to end users does not satisfy this Section for products Distributed
+to end users.
+
+5.10 Honest Commercial Distribution — You may charge for the Distribution of
+the Licensed Material or Derivative Works thereof. However, You shall not:
+(a) represent that the Licensed Material itself is proprietary or
+licensed exclusively to You; (b) impose on any recipient of the Licensed
+Material any restriction on that recipient's rights under this License; or
+(c) where You Distribute the Licensed Material itself, as opposed to a
+Derivative Work or a larger product incorporating it, for a fee, fail to
+disclose clearly that the Licensed Material is also available free of charge
+under this License. This Section does not prevent You from charging for Your
+Derivative Works, additional works, services, support, maintenance, or
+warranties.
+
+SECTION 6 - THIRD-PARTY MATERIAL
+
+6.1 Identification and Separate Terms — The Licensed Material may be
+Distributed together with Third-Party Material, which remains governed by its
+own terms. Nothing in this License licenses, or is to be construed as
+licensing, any Third-Party Material, and nothing in this License restricts,
+or is to be construed as restricting, the rights of any Third-Party
+Rightsholder.
+
+6.2 Compliance with Third-Party Terms — Mandatory. When You use, reproduce, or
+Distribute Third-Party Material included with the Licensed Material, You must
+comply with the applicable terms of that Third-Party Material, in addition to
+the conditions of this License.
+
+6.3 Retention of Third-Party Notices — Where the Licensor has Distributed a
+notice file, asset manifest, or documentation identifying Third-Party
+Material, You must preserve and convey, with every copy of the Licensed
+Material or Derivative Work that You Distribute, the third-party notices,
+asset manifests, and license texts accompanying such Third-Party Material, in
+a manner consistent with Sections 5.1 to 5.3 and 5.9.
+
+6.4 No Removal or Misrepresentation — You shall not remove, alter, obscure,
+or misrepresent the provenance, attribution, or license terms of Third-Party
+Material included with the Licensed Material.
+
+6.5 Conflict of Terms — Where the license terms applicable to an item of
+Third-Party Material conflict with this License, the terms of that Third-Party
+Material prevail solely with respect to that item, and this License continues
+to apply to the remainder of the Licensed Material.
+
+SECTION 7 - SUBMISSION OF CONTRIBUTIONS
+
+7.1 License Grant to the Licensor — Unless You explicitly state otherwise, any
+Contribution that You intentionally submit for inclusion in the Licensed
+Material shall be under the terms and conditions of this License, without any
+additional terms or conditions. Notwithstanding the foregoing, nothing in this
+License shall supersede or modify the terms of any separate license agreement
+that You may have executed with the Licensor regarding such Contributions.
+
+7.2 Representations and Warranties — By submitting a Contribution, You
+represent and warrant that: (a) You have the full legal right, power, and
+authority to grant the licenses granted in Section 7.1, free and clear of all
+encumbrances and third-party claims; (b) the Contribution is Your original
+creation; and (c) to the extent that the Contribution is not Your original
+creation, You have identified the third-party source of the Contribution to
+the Licensor in a written notice, and You have obtained, or ensured that the
+Licensor may obtain, all rights and permissions necessary to incorporate and
+license the Contribution in accordance with this License.
+
+7.3 No Obligation to Accept — Nothing in this License obligates the Licensor
+to accept, incorporate, integrate, or otherwise use any Contribution.
+
+7.4 Moral Rights — To the fullest extent permitted by Applicable Law, by
+submitting a Contribution You waive any and all moral rights, including rights
+of attribution and integrity, that may be held by You in such Contribution in
+favor of the Licensor, subject always to the attribution and notice obligations
+imposed by this License.
+
+SECTION 8 - TRADEMARK PROVISIONS
+
+8.1 Ownership — The Brand Mark is owned exclusively by the Licensor. This
+License grants You no rights of any kind in or to the Brand Mark, and nothing
+in Sections 2 through 9 confers, by implication, estoppel, or otherwise, any
+trademark, service mark, trade name, trade dress, or logo rights.
+
+8.2 Permitted Use — Without prior written authorization from the Licensor,
+You may: (a) use the Licensed Material to create and Distribute Your own User
+Works and Derivative Works under Your own terms, subject to Section 5;
+(b) refer to the Brand Mark nominatively and descriptively in documentation,
+source files, presentations, marketing materials, and truthful factual
+statements, including statements of interoperability, compatibility, or
+provenance (for example, "built with [Licensed Material]", "targets [Licensed
+Material]", "compatible with [Licensed Material]"); and (c) identify that a
+User Work or implementation is compatible with, targets, or interoperates with
+the Licensed Material, provided that such use is accurate, truthful, and not
+likely to confuse any person as to source, sponsorship, affiliation, or
+endorsement.
+
+8.3 Prohibited Use — Without the prior express written authorization of the
+Licensor, You shall not: (a) use the Brand Mark, or any confusingly similar
+variant thereof, as or as part of the name or branding of Your own products,
+services, implementations, packages, or companies, in a manner likely to cause
+confusion with the Licensor or with the Licensed Material; (b) reproduce,
+modify, distort, or create derivative logos or graphic devices based upon the
+Brand Mark, including the logo and graphic assets Distributed with the
+Licensed Material; (c) use the Brand Mark in any manner that could reasonably
+imply official support, certification, endorsement, sponsorship, or
+affiliation by the Licensor; or (d) use the Brand Mark in any manner that
+diminishes, dilutes, tarnishes, or damages the goodwill associated with it, or
+that violates Applicable Law relating to trademarks, unfair competition, or
+misleading advertising.
+
+8.4 Enforcement — The Licensor reserves the right to enforce its rights in
+the Brand Mark by all legal and equitable means available under Applicable
+Law, including requesting corrective action, seeking injunctive relief, and
+claiming damages.
+
+SECTION 9 - DISCLAIMER OF WARRANTY
+
+THE LICENSED MATERIAL IS PROVIDED BY THE LICENSOR AND CONTRIBUTORS "AS IS" AND
+ON AN "AS AVAILABLE" BASIS, WITHOUT WARRANTIES OF ANY KIND, WHETHER EXPRESS,
+IMPLIED, OR STATUTORY, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, ACCURACY,
+NON-INFRINGEMENT, AND ANY WARRANTIES ARISING FROM COURSE OF DEALING, COURSE OF
+PERFORMANCE, OR USAGE OF TRADE. NO WARRANTY IS MADE THAT THE LICENSED MATERIAL
+WILL BE UNINTERRUPTED, TIMELY, SECURE, OR ERROR-FREE, THAT DEFECTS WILL BE
+CORRECTED, OR THAT IT WILL OPERATE IN COMBINATION WITH YOUR HARDWARE, SYSTEMS,
+OR DATA.
+
+TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, THE ENTIRE RISK ARISING OUT
+OF THE USE OF THE LICENSED MATERIAL REMAINS WITH YOU. THIS LICENSE IS GRANTED
+BY THE LICENSOR AND EACH CONTRIBUTOR INDIVIDUALLY, AND NO LICENSOR OR
+CONTRIBUTOR MAKES ANY REPRESENTATION OR WARRANTY ON BEHALF OF ANY OTHER. WHERE
+YOU CHOOSE TO OFFER A WARRANTY OR INDEMNITY IN CONNECTION WITH THE LICENSED
+MATERIAL, YOU DO SO SOLELY ON YOUR OWN BEHALF AND SOLELY AT YOUR OWN
+RESPONSIBILITY, AND YOU INDEMNIFY THE LICENSOR AND CONTRIBUTORS AGAINST ANY
+CLAIMS ARISING FROM SUCH OFFER.
+
+SECTION 10 - LIMITATION OF LIABILITY
+
+TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL THE
+LICENSOR OR ANY CONTRIBUTOR BE LIABLE TO YOU OR TO ANY THIRD PARTY FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE
+DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF USE, DATA, PROFITS, REVENUE, OR
+GOODWILL, BUSINESS INTERRUPTION, OR PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES, HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+TORT (INCLUDING NEGLIGENCE OR OTHERWISE), STRICT LIABILITY, OR OTHERWISE,
+ARISING IN ANY WAY OUT OF THE USE OF, OR INABILITY TO USE, THE LICENSED
+MATERIAL, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+WHERE APPLICABLE LAW PROHIBITS THE EXCLUSION OR LIMITATION OF CERTAIN
+LIABILITIES OR DAMAGES, THE FOREGOING LIMITATIONS AND EXCLUSIONS SHALL APPLY
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, AND ANY LIABILITY THAT
+CANNOT BE EXCLUDED OR LIMITED UNDER APPLICABLE LAW SHALL BE GOVERNED BY SUCH
+APPLICABLE LAW.
+
+SECTION 11 - TERMINATION
+
+11.1 Termination for Breach — This License and the rights granted hereunder
+will terminate automatically, without notice, upon Your breach of any term of
+this License, unless the breach is cured within thirty (30) days after You
+become aware of, or are notified of, the noncompliance.
+
+11.2 Material Breach — Failure to comply with the mandatory attribution,
+notice, and third-party compliance obligations of Sections 5 and 6 with
+respect to the use or Distribution of Licensed Material in Source Form
+constitutes a material breach of this License. If such a breach is not cured
+within thirty (30) days after You become aware of, or are notified of, the
+noncompliance, the rights granted under this License shall terminate
+automatically upon the expiration of that cure period, and You shall cease all
+use, reproduction, and Distribution of Licensed Material in Source Form until
+such breach is cured. If the breach is cured within the cure period, this
+License and the rights granted hereunder shall continue in full force and
+effect and shall be deemed never to have terminated by reason of that breach.
+
+11.3 User Works Not Affected — For the avoidance of doubt, no breach of this
+License shall be deemed to occur solely by virtue of Your use or Distribution
+of User Works created for or with the Licensed Material that do not
+incorporate or reproduce Licensed Material in Source Form.
+
+11.4 Effect of Termination — Upon termination, all licenses granted to You
+under this License terminate, and Your rights to use, modify, and Distribute
+the Licensed Material cease forthwith. Sections 6, 8, 9, 10, 11.4, 11.6, 12,
+14, and 15 survive any termination. If You have sublicensed any Derivative
+Work prior to termination, such sublicenses survive termination only to the
+extent that they do not violate the terms of this License.
+
+11.5 Automatic Reinstatement — Where rights granted to You by a Licensor
+terminate under Section 11.1 or 11.2 because of a failure to cure a breach,
+such rights are automatically reinstated as of the date on which You cure all
+prior breaches attributable to You, provided that You cure such breaches
+within sixty (60) days after You become aware of, or are notified of, the
+first such breach, and provided that this is the first termination of rights
+granted to You by that Licensor under this License. Any termination occurring
+after such a first reinstatement may be reversed only at the sole discretion
+of the Licensor, upon Your cure of the breach and written notification to the
+Licensor of such cure.
+
+11.6 Enforcement Costs — In any action, arbitration, or proceeding to enforce or interpret
+this License, the prevailing party shall be entitled to recover its reasonable
+attorneys' fees and costs, to the extent permitted by Applicable Law.
+
+SECTION 12 - GOVERNING LAW AND JURISDICTION
+
+12.1 Governing Law — The Licensor may designate the governing law for this
+License by a Designation as described in Section 12.2. In the absence of an
+effective Designation, this License shall be governed by and construed in
+accordance with the laws of the jurisdiction in which the Licensor is
+domiciled, without regard to its conflict-of-laws provisions.
+
+12.2 Jurisdiction and Designation — The Licensor may, in the notice file
+distributed under Section 5.7, in the LICENSE file accompanying the Licensed
+Material, or in other documentation distributed with the Licensed Material,
+expressly designate, in a statement plainly identified as being made under
+this Section 12.2: (a) a governing law only; (b) a governing law together with
+the competent courts of a specific jurisdiction as the exclusive forum;
+(c) a governing law together with a specific jurisdiction as a non-exclusive
+forum; or (d) a governing law together with arbitration as the dispute
+resolution mechanism, under the arbitration rules of a named arbitral
+institution seated in a neutral jurisdiction (for example, the Singapore
+International Arbitration Centre (SIAC) or the Hong Kong International
+Arbitration Centre (HKIAC)). In the absence of an effective Designation of a
+forum, any dispute, controversy, or claim arising out of or relating to this
+License shall be subject to the exclusive jurisdiction of the competent courts
+of the jurisdiction in which the Licensor is domiciled.
+
+12.3 Election of Neutral Arbitration — Notwithstanding Sections 12.1 and
+12.2, You may elect to resolve any dispute, controversy, or claim arising out
+of or relating to this License by arbitration instead of court proceedings, by
+commencing arbitration under the Arbitration Rules of the Singapore
+International Arbitration Centre (SIAC) or the Hong Kong International
+Arbitration Centre (HKIAC), with the seat in Singapore or Hong Kong
+respectively, the language of the proceedings being English, and the tribunal
+consisting of one arbitrator, and by giving the Licensor written notice at or
+before commencing such arbitration. An election under this Section is valid
+only for the dispute in respect of which it is made, and does not bind any
+other person or any future dispute. Nothing in this Section 12 prevents either
+party from seeking urgent interim or injunctive relief from a competent court.
+
+12.4 Mandatory Provisions — Where any jurisdiction requires that its mandatory
+laws or public policy be applied notwithstanding the choice of law made in
+Section 12.1, the provisions of such jurisdiction shall prevail to the extent
+that they cannot be excluded by agreement, and the remainder of this License
+shall continue in full force and effect.
+
+SECTION 13 - SEVERABILITY AND WAIVER
+
+13.1 Severability — If any provision, or portion of a provision, of this
+License is held to be invalid, illegal, or unenforceable under Applicable Law,
+such provision shall be construed, interpreted, and reformed to the maximum
+extent possible to achieve the intent of the parties, and the remaining
+provisions of this License shall continue in full force and effect.
+
+13.2 Waiver — No waiver of any term of this License shall be effective unless
+in writing and signed by the party against whom the waiver is asserted. The
+failure of the Licensor to exercise or enforce any right or provision of this
+License shall not constitute a waiver of such right or provision, and no
+single or partial exercise of any right or provision shall preclude any other
+or further exercise thereof.
+
+SECTION 14 - ENTIRE AGREEMENT; VERSIONS
+
+14.1 Entire Agreement — This License constitutes the entire agreement between
+You and the Licensor with respect to the Licensed Material and supersedes all
+prior and contemporaneous understandings, agreements, representations, and
+communications, whether oral or written, regarding such subject matter.
+
+14.2 Amendment — This License may only be amended or supplemented by a written
+instrument executed by an authorized representative of the Licensor.
+Electronic signatures and other forms of electronic authentication shall be
+given the same legal effect and validity as original written signatures to the
+fullest extent permitted by Applicable Law.
+
+14.3 Continued Application — Each version of the Licensed Material is governed
+by the version of this License under which it was released. If the Licensor
+releases the Licensed Material under a later version of this License, You may
+continue to exercise Your rights under, and distribute and relicense, prior
+versions of the Licensed Material under the version of this License under
+which they were released.
+
+SECTION 15 - GENERAL PROVISIONS
+
+15.1 Compliance with Laws — You shall comply with all Applicable Law, including
+but not limited to export control laws, import laws, and sanctions laws, in
+exercising the rights granted under this License. You shall not use the
+Licensed Material in any manner that violates Applicable Law.
+
+15.2 Independent Development — Nothing in this License shall be construed to
+restrict You from independently developing, having developed, or Distributing
+works or technology that are functionally similar to, interoperable with, or
+competitive with the Licensed Material, provided that such works do not
+incorporate or reproduce Licensed Material in Source Form in violation of this
+License.
+
+15.3 Headings — The section and clause headings in this License are inserted
+for convenience of reference only and shall not be used to construe or
+interpret the provisions of this License.
+
+15.4 Relationship of the Parties — Nothing in this License shall create, or be
+deemed to create, a partnership, joint venture, agency, employment, or
+fiduciary relationship between You and the Licensor or any Contributor.
+
+15.5 Third-Party Beneficiaries — Subject to the terms of this License, each
+Contributor is an intended third-party beneficiary of this License with
+respect to its Contributions, and may directly enforce the terms of this
+License against You to the extent necessary to protect its rights in its
+Contributions. Each Third-Party Rightsholder is an intended third-party
+beneficiary of this License with respect to its Third-Party Material, to the
+extent provided in Section 6.
+
+15.6 License Text — The text of this License may be reproduced in whole,
+verbatim and unaltered, by any person, for any purpose, including for the
+purpose of complying with the notice requirements of Section 5, without the
+need for any additional permission or attribution beyond the retention of this
+License text itself.
+
+15.7 No Support Obligations — The exercise of the rights granted under this
+License does not entitle You to any support, maintenance, updates, new
+versions, error corrections, or other services from the Licensor or any
+Contributor, whether or not such services are made available to others.
+
+15.8 Official Translations — The Licensor may publish translations of this
+License. Only a translation expressly designated by the Licensor as official
+is an "Official Translation". Official Translations are provided to aid
+understanding, and the conditions of this License apply equally to all
+language versions; in the event of any conflict or inconsistency between an
+Official Translation and the English text of this License, the English text
+prevails.
+
+------------------------------------------------------------------------
+
+APPENDIX - HOW TO APPLY THE TIE PUBLIC LICENSE TO YOUR WORK
+
+To apply the Tie Public License to your work, attach the following notices to
+the work. It is safest to attach them to the start of each source file to most
+effectively state the terms of this License; each file should have at least
+the "copyright" line and a pointer to where the full notice is found.
+
+    <one line to give the work's name and a brief idea of what it is.>
+    Copyright (C) <year> <name of copyright holder>
+
+    This work is released under the Tie Public License, version 2.3
+    ("TPL-2.3").
+    The full text of the license is available in the LICENSE file at the
+    root of the distribution, or online at
+    https://github.com/tie-lang/TPL/blob/main/tpl.txt (the canonical,
+    always-current text of this License) and at https://tpl.franj2.top/.
+
+Where the work is interactive (for example, a command-line program), make it
+output a short notice like this when it starts in an interactive mode:
+
+    <work>  Copyright (C) <year>  <name of copyright holder>
+    This work comes with ABSOLUTELY NO WARRANTY; for details see the LICENSE
+    file. This is free material, and you are welcome to redistribute it under
+    certain conditions; see the LICENSE file for details.
+
+Where the work is not a program (for example, a document, font, dataset, or
+model), state the notice in a credits, colophon, or license page, or in the
+file that accompanies the work.
+
+Always state the exact version ("TPL-2.3") in the notice. Do not use wording
+such as "the current version": each release of the work remains governed by
+the version stated in its notice, as provided in Section 14.3.
+
+If your distribution includes Third-Party Material within the meaning of
+Section 6, ensure that all third-party notices, asset manifests, and license
+texts accompanying such material are preserved and conveyed with every copy,
+in accordance with Sections 6.2 and 6.3.
+
+If You intend to designate a governing law or venue pursuant to Section 12.2,
+state the Designation plainly in the LICENSE file or notice file, identifying
+it as a designation under Section 12.2 of the Tie Public License.
+
+You should also get your employer (if you work as a programmer) or school, if
+any, to sign a "copyright disclaimer" for the work, if necessary.
+
+The Licensor's name and Brand Mark may not be used to endorse or promote works
+derived from the Licensed Material without the Licensor's prior written
+permission, or, where the law provides for such use, in a non-confusing manner
+in compliance with Section 8. For enquiries regarding the use of the
+Licensor's name or Brand Mark, please contact the Licensor.
+
+------------------------------------------------------------------------
+
+END OF TERMS AND CONDITIONS
