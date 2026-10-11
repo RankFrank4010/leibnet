@@ -1,0 +1,77 @@
+type tie<class>
+// src/conf.tie —— 配置装载与访问（leibnet 0.1.0）
+// ============================================================
+// 设计原则（设计稿 §6）：默认即大多数；一切策略皆配置且全量默认。
+// 实现：td（tie:data）解析复用 tie 生态既有配置模块（自包含纯 tie 实现，
+// 无别名引用——别名 × 分片命名空间存在编译器缺陷，见项目任务）；
+// 默认值在访问点提供：配置文件缺省或键缺失时返回该项出厂默认。
+// 数据流：出厂默认（访问点常量）→ 配置文件（--config / 探测）→（后续）CLI 覆盖
+import "../../tie-repo/tiec/compiler/config.tie"
+
+namespace conf {
+
+// ---------- 装载 ----------
+
+// 装载配置文件；路径为空或文件缺失/解析失败返回 -1（错误见 last_error()）。
+pub func load(path: string) -> i64 {
+    if str_len(path) == 0 {
+        return -1
+    }
+    return config.parse_file(path)
+}
+
+// 最近一次装载/解析的错误消息（成功时为空串）。
+pub func last_error() -> string {
+    return config.err_msg()
+}
+
+// ---------- 访问器（带出厂默认；root < 0 时直接返回默认） ----------
+// 键存在性用 path_get 判定（返回节点 id，-1 表示缺失）——空串值不会被误当缺失。
+
+pub func get_str(root: i64, path: string, dflt: string) -> string {
+    if root < 0 {
+        return dflt
+    }
+    if config.path_get(root, path) < 0 {
+        return dflt
+    }
+    return config.get_str(root, path)
+}
+
+pub func get_int(root: i64, path: string, dflt: i64) -> i64 {
+    if root < 0 {
+        return dflt
+    }
+    if config.path_get(root, path) < 0 {
+        return dflt
+    }
+    return config.get_int(root, path)
+}
+
+pub func get_bool(root: i64, path: string, dflt: bool) -> bool {
+    if root < 0 {
+        return dflt
+    }
+    if config.path_get(root, path) < 0 {
+        return dflt
+    }
+    return config.get_bool(root, path)
+}
+
+// ---------- 启动摘要 ----------
+
+// 配置摘要（启动打印；展示当前生效的关键项）。
+pub func summary(root: i64) -> string {
+    var s = ""
+    s = s + "server.name    = " + get_str(root, "server.name", "leibnet") + "\n"
+    s = s + "server.port    = " + to_string(get_int(root, "server.port", 8080)) + "\n"
+    s = s + "server.workers = " + to_string(get_int(root, "server.workers", 0)) + "\n"
+    var c = get_bool(root, "console.enabled", true)
+    if c {
+        s = s + "console.enabled = true\n"
+    } else {
+        s = s + "console.enabled = false\n"
+    }
+    return s
+}
+}

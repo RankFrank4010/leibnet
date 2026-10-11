@@ -1,0 +1,23 @@
+type tie<logic>
+// leibnet —— tie 生态接入层服务器
+// src/main.tie —— 程序入口（0.1.0 骨架：CLI → 配置装载 → 启动摘要）
+import "./conf.tie"
+import "/std/args.tie" as args
+
+func main() {
+    // --config <path>：显式配置文件；缺省则探测当前目录 leibnet.td
+    var explicit = args.value("--config")
+    var cfg_path = explicit
+    if str_len(cfg_path) == 0 {
+        cfg_path = "leibnet.td"
+    }
+    var root = conf.load(cfg_path)
+    // 显式指定的配置装载失败 → 报错退出；默认探测未命中 → 纯默认运行
+    if root < 0 && str_len(explicit) > 0 {
+        println("leibnet: 配置装载失败: " + conf.last_error())
+        return
+    }
+    println("leibnet 0.1.0-dev")
+    println("--- 配置摘要 ---")
+    print(conf.summary(root))
+}
