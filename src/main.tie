@@ -3,17 +3,20 @@ type tie<logic>
 // src/main.tie —— 程序入口与编排（0.1.0 骨架：CLI → 配置装载 → 启动摘要）
 // ============================================================
 // 模块结构（src/ 下按设计稿 §3 分层解耦，经 import 组合；main 只做编排）：
-//   main.tie   入口与编排：CLI → 配置 → 摘要 →（0.1.0 后续）事件引擎启动
+//   main.tie   入口与编排：CLI → 配置 → 摘要 → 事件引擎启动（服务循环）
 //   conf/      控制面·配置：td 装载 + 带出厂默认的访问器（ns conf）
 //   —— 已划定归属、随任务落位（0.1.0 路线内）——
-//   sys/       平台层：unsafe extern 收敛——src/sys/net_win.tie（ns netw，win32
-//              select）与 src/sys/net_posix.tie（ns netp，Linux epoll）接口同名，
+//   sys/       平台层：unsafe extern 收敛——net_win.tie（Winsock2/select）与
+//              net_posix.tie（epoll）经 #cfg 门面 net.tie 二选一（ns 统一为 net），
 //              对外只暴露安全接口（规范 §5.11/§11.5 封装纪律）
-//   ev/        事件引擎：统一事件接口 + 连接管理 + 定时器雏形
-//   http/      HTTP/1.1 协议面：请求解析 / 响应构造 / 静态服务
+//   ev/        事件引擎：拉取式事件表 + 连接管理（event_loop.tie；定时器雏形随 0.2）
+//   http/      HTTP/1.1 协议面：请求解析 / 响应构造 / 静态服务（http1.tie）
 //   console/   tshell 内嵌雏形
 //   obs/       观测：metrics / 结构化日志（横切）
 import "./conf/conf.tie"
+import "./ev/event_loop.tie"
+import "./http/http1.tie"
+import "./sys/net.tie"
 import "/std/args.tie" as args
 
 func main() {
@@ -35,5 +38,38 @@ func main() {
     println("leibnet 0.1.0-dev")
     println("--- 配置摘要 ---")
     print(conf.summary(root))
-    // ---- 阶段 4：（0.1.0 后续）事件引擎启动 ----
+    // ---- 阶段 4：事件引擎启动（服务循环）----
+    var pport = conf.get_int(root, "server.port", 8080)
+    var doc_root = conf.get_str(root, "server.doc_root", "www")
+    if ev.start(pport) != 0 {
+        println("leibnet: 监听失败（port=" + to_string(pport) + "，err=" + to_string(net.last_error()) + "）")
+        return
+    }
+    println("leibnet 正在服务: port=" + to_string(pport) + " doc_root=" + doc_root)
+    serve_loop(doc_root)
+}
+
+// 服务循环（单线程事件引擎；0.1.0：GET/HEAD 静态服务）
+func serve_loop(doc_root: string) {
+    while true {
+        var es = ev.poll(50000)
+        var i: i64 = 0
+        var n = len(es)
+        while i + 2 < n {
+            var kind = es[i]
+            var conn = es[i + 1]
+            var extra = es[i + 2]
+            if kind == 2 && extra > 0 {
+                var data = ev.take(conn)
+                var (st, resp, consumed) = http1.try_respond(data, doc_root)
+                if st == 1 || st == -1 {
+                    ev.send(conn, resp)
+                } else if len(data) > 65536 {
+                    // 请求头超限（0.1.0：简单防护，超限断开）
+                    ev.close_conn(conn)
+                }
+            }
+            i = i + 3
+        }
+    }
 }

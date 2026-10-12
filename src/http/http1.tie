@@ -1,0 +1,212 @@
+type tie<class>
+// src/http/http1.tie —— HTTP/1.1 协议面（0.1.0 最小实现：GET/HEAD + 静态文件）
+// ============================================================
+// 纯函数式（可离线测试）：不解 socket；输入=字节表，输出=响应字节表。
+// 主入口 try_respond(buf, doc_root) -> (state, resp, consumed)：
+//   state：0 = 请求未完整到达（继续收）；1 = 响应已生成（发送 resp，consume consumed）；
+//          -1 = 协议错误（resp = 错误响应，consume 全部已收）。
+// 支持：GET/HEAD；keep-alive 默认（不主动关闭）；定界 = 头结束（\r\n\r\n）；
+//   路径防穿越（".." 严格拒绝）；"/" → index.html；Content-Type 按扩展名映射。
+// 不支持（0.1.0 记档）：其他方法（501）、请求 body、百分号解码、分块传输、pipeline 残帧。
+// 依赖：/std/fs.tie（读文件字节）。
+import "/std/fs.tie" as fs
+
+namespace http1 {
+
+// ---------- 字节/字符串小工具 ----------
+
+// 字节区间 [a, e) → 字符串（ASCII；HTTP 头按字节安全）
+func bytes_to_str(b: table<i64>, a: i64, e: i64) -> string {
+    var sb = string_builder()
+    var i = a
+    var n = len(b)
+    while i < e && i < n {
+        sb_append_byte(sb, b[i])
+        i = i + 1
+    }
+    return sb_build(sb)
+}
+
+// 字符串 → 字节表
+func str_to_bytes(s: string) -> table<i64> {
+    var out: table<i64> = []
+    var i: i64 = 0
+    var n = len(s)
+    while i < n {
+        table_push(out, str_byte(s, i))
+        i = i + 1
+    }
+    return out
+}
+
+// 4 字节序列 [c0,c1,c2,c3] 首匹配起点；未找到 -1（头结束 \r\n\r\n 定位用）
+func find_seq4(b: table<i64>, c0: i64, c1: i64, c2: i64, c3: i64) -> i64 {
+    var n = len(b)
+    var i: i64 = 0
+    while i + 3 < n {
+        if b[i] == c0 && b[i + 1] == c1 && b[i + 2] == c2 && b[i + 3] == c3 {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// 字符串含 ".."（防穿越，严格拒绝）
+func has_dotdot(s: string) -> bool {
+    var n = len(s)
+    var i: i64 = 0
+    while i + 1 < n {
+        if str_byte(s, i) == 46 && str_byte(s, i + 1) == 46 {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+// 后缀判定
+func has_suffix(s: string, suf: string) -> bool {
+    var n = len(s)
+    var m = len(suf)
+    if n < m {
+        return false
+    }
+    var i: i64 = 0
+    while i < m {
+        if str_byte(s, n - m + i) != str_byte(suf, i) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// Content-Type 最小映射（逐后缀判断；按设计纪律避免正则）
+func content_type_of(path: string) -> string {
+    if has_suffix(path, ".html") || has_suffix(path, ".htm") {
+        return "text/html; charset=utf-8"
+    }
+    if has_suffix(path, ".css") {
+        return "text/css; charset=utf-8"
+    }
+    if has_suffix(path, ".js") {
+        return "text/javascript; charset=utf-8"
+    }
+    if has_suffix(path, ".json") {
+        return "application/json; charset=utf-8"
+    }
+    if has_suffix(path, ".txt") || has_suffix(path, ".md") {
+        return "text/plain; charset=utf-8"
+    }
+    if has_suffix(path, ".svg") {
+        return "image/svg+xml"
+    }
+    if has_suffix(path, ".png") {
+        return "image/png"
+    }
+    if has_suffix(path, ".jpg") || has_suffix(path, ".jpeg") {
+        return "image/jpeg"
+    }
+    if has_suffix(path, ".gif") {
+        return "image/gif"
+    }
+    if has_suffix(path, ".ico") {
+        return "image/x-icon"
+    }
+    return "application/octet-stream"
+}
+
+// 请求行解析：返回 (method_id, path, ok)；method：0=GET 1=HEAD 2=其他
+func parse_reqline(b: table<i64>, hdr_end: i64) -> (i64, string, i64) {
+    // 行结束（首个 \r\n 于 [0, hdr_end)）
+    var e: i64 = -1
+    var i: i64 = 0
+    while i + 1 < hdr_end {
+        if b[i] == 13 && b[i + 1] == 10 {
+            e = i
+            i = hdr_end
+        } else {
+            i = i + 1
+        }
+    }
+    if e < 0 {
+        return (2, "", -1)
+    }
+    // 方法
+    var m: i64 = 2
+    if e >= 4 && b[0] == 71 && b[1] == 69 && b[2] == 84 && b[3] == 32 {
+        m = 0                                        // "GET "
+    } else if e >= 5 && b[0] == 72 && b[1] == 69 && b[2] == 65 && b[3] == 68 && b[4] == 32 {
+        m = 1                                        // "HEAD "
+    }
+    // 两个空格（method SP path SP version）
+    var s1: i64 = -1
+    var s2: i64 = -1
+    var j: i64 = 0
+    while j < e {
+        if b[j] == 32 {
+            if s1 < 0 {
+                s1 = j
+            } else {
+                s2 = j
+                j = e
+            }
+        }
+        j = j + 1
+    }
+    if s1 < 0 || s2 < 0 {
+        return (2, "", -1)
+    }
+    return (m, bytes_to_str(b, s1 + 1, s2), 0)
+}
+
+// 组装响应（head_only=1 时不含 body）
+func build_response(status_code: i64, reason: string, ctype: string, body: table<i64>, head_only: i64) -> table<i64> {
+    var head = "HTTP/1.1 " + to_string(status_code) + " " + reason + "\r\n" + "Content-Type: " + ctype + "\r\n" + "Content-Length: " + to_string(len(body)) + "\r\n" + "Connection: keep-alive\r\n" + "\r\n"
+    var out = str_to_bytes(head)
+    if head_only == 0 {
+        for x in body {
+            table_push(out, x)
+        }
+    }
+    return out
+}
+
+// 主入口（状态约定见文件头）
+pub func try_respond(buf: table<i64>, doc_root: string) -> (i64, table<i64>, i64) {
+    var empty: table<i64> = []
+    var hdr_end = find_seq4(buf, 13, 10, 13, 10)
+    if hdr_end < 0 {
+        return (0, empty, 0)
+    }
+    var consumed = hdr_end + 4
+    var (method, path, pok) = parse_reqline(buf, hdr_end)
+    if pok != 0 {
+        return (-1, build_response(400, "Bad Request", "text/plain; charset=utf-8", str_to_bytes("bad request\n"), 0), consumed)
+    }
+    if method == 2 {
+        return (-1, build_response(501, "Not Implemented", "text/plain; charset=utf-8", str_to_bytes("only GET/HEAD supported\n"), 0), consumed)
+    }
+    var hd: i64 = 0
+    if method == 1 {
+        hd = 1
+    }
+    if str_len(path) == 0 || str_byte(path, 0) != 47 {
+        return (-1, build_response(400, "Bad Request", "text/plain; charset=utf-8", str_to_bytes("bad path\n"), hd), consumed)
+    }
+    if has_dotdot(path) {
+        return (-1, build_response(403, "Forbidden", "text/plain; charset=utf-8", str_to_bytes("forbidden\n"), hd), consumed)
+    }
+    var fpath = path
+    if str_len(path) == 1 {
+        fpath = "/index.html"
+    }
+    var full = doc_root + fpath
+    if !fs.exists(full) {
+        return (1, build_response(404, "Not Found", "text/plain; charset=utf-8", str_to_bytes("not found\n"), hd), consumed)
+    }
+    var body = fs.read_bytes(full)
+    return (1, build_response(200, "OK", content_type_of(fpath), body, hd), consumed)
+}
+}
