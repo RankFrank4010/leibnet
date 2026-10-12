@@ -95,6 +95,56 @@ pub func http_max_header(root: i64) -> i64 {
     return get_int(root, "http.max_header", 16384)
 }
 
+// ---------- sites（虚拟主机；数组，每项表：host?/doc_root） ----------
+
+// 站点数（无 sites 段 = 0）。
+pub func site_count(root: i64) -> i64 {
+    if root < 0 {
+        return 0
+    }
+    var arr = config.path_get(root, "sites")
+    if arr < 0 {
+        return 0
+    }
+    return config.arr_len(arr)
+}
+
+// 站点 i 的 host 模式（空串 = 默认站点/未声明；支持 "*.后缀" 通配）。
+pub func site_host(root: i64, i: i64) -> string {
+    if root < 0 {
+        return ""
+    }
+    var arr = config.path_get(root, "sites")
+    if arr < 0 {
+        return ""
+    }
+    var site = config.arr_at(arr, i)
+    if site < 0 {
+        return ""
+    }
+    var hn = config.map_get(site, "host")
+    if hn < 0 {
+        return ""
+    }
+    return config.str_val(hn)
+}
+
+// 站点 i 的文档根（缺失回落 dflt，通常传 server.doc_root）。
+pub func site_doc_root(root: i64, i: i64, dflt: string) -> string {
+    if root < 0 {
+        return dflt
+    }
+    var arr = config.path_get(root, "sites")
+    if arr < 0 {
+        return dflt
+    }
+    var site = config.arr_at(arr, i)
+    if site < 0 {
+        return dflt
+    }
+    return get_str(site, "doc_root", dflt)
+}
+
 // ---------- 启动摘要 ----------
 
 // 配置摘要（启动打印；展示当前生效的关键项）。
@@ -110,6 +160,7 @@ pub func summary(root: i64) -> string {
     } else {
         s = s + "console.enabled = false\n"
     }
+    s = s + "sites          = " + to_string(site_count(root)) + "\n"
     return s
 }
 }

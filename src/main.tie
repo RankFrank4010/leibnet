@@ -55,6 +55,20 @@ func main() {
     console.set_ctx(root, pport, doc_root)
     // http 数据面限额（判据单一来源在 conf；启动注入）
     http1.set_limits(conf.http_max_header(root), conf.http_max_body(root), conf.http_keepalive_ms(root))
+    // 虚拟主机（sites 段 → http1 路由表；无则单根回落 server.doc_root）
+    var sc = conf.site_count(root)
+    var shosts = table_new_string()
+    var sroots = table_new_string()
+    var si: i64 = 0
+    while si < sc {
+        table_push(shosts, conf.site_host(root, si))
+        table_push(sroots, conf.site_doc_root(root, si, doc_root))
+        si = si + 1
+    }
+    http1.set_sites(shosts, sroots)
+    if sc > 0 {
+        println("sites 就绪: " + to_string(sc) + " 个")
+    }
     if ev.start(pport) != 0 {
         println("leibnet: 监听失败（port=" + to_string(pport) + "，err=" + to_string(net.last_error()) + "）")
         return

@@ -30,6 +30,9 @@ var g_ka_ms: i64 = 60000;               // keep-alive 空闲回收毫秒（0 = �
 var g_closing: table<i64> = [];         // 排空关闭（linger）中的连接
 var g_cldl: table<i64> = [];            // 对应 linger 截止时刻（单调毫秒）
 var g_linger_ms: i64 = 2000;            // 排空关闭 linger 上限（毫秒）
+var g_req_host: string = "";            // scan_headers 主机头输出槽（去端口）
+var g_site_hosts: table<string> = [];   // 虚拟主机模式（"" = 默认站点）
+var g_site_roots: table<string> = [];   // 对应文档根
 
 namespace http1 {
 
@@ -40,6 +43,14 @@ pub func set_limits(max_header: i64, max_body: i64, keepalive_ms: i64) -> i64 {
     g_max_header = max_header
     g_max_body = max_body
     g_ka_ms = keepalive_ms
+    return 0
+}
+
+// 虚拟主机表注入（main 启动时从 conf 读入；空表 = 单根回退 server.doc_root）。
+// host 模式：精确匹配或 "*.后缀" 通配（大小写不敏感）；"" = 默认站点（首个生效）。
+pub func set_sites(hosts: table<string>, roots: table<string>) -> i64 {
+    g_site_hosts = hosts
+    g_site_roots = roots
     return 0
 }
 
@@ -334,17 +345,8 @@ func ver10_of(b: table<i64>, e: i64) -> i64 {
 // 请求行解析：返回 (method_id, path, ok)；method：0=GET 1=HEAD 2=其他 3=OPTIONS；
 // 版本写入模块槽 g_req_ver10。ok：0 = 正常，-1 = 畸形。
 func parse_reqline(b: table<i64>, hdr_end: i64) -> (i64, string, i64) {
-    // 行结束（首个 \r\n 于 [0, hdr_end)）
-    var e: i64 = -1
-    var i: i64 = 0
-    while i + 1 < hdr_end {
-        if b[i] == 13 && b[i + 1] == 10 {
-            e = i
-            i = hdr_end
-        } else {
-            i = i + 1
-        }
-    }
+    // 行结束 = 缓冲内首个 CRLF（无头部请求时它就是终止符的 CRLF——不可用 hdr_end 裁剪）
+    var e = find_crlf(b, 0)
     if e < 0 {
         return (2, "", -1)
     }
@@ -454,9 +456,112 @@ func scan_headers(b: table<i64>, start: i64, stop: i64) -> table<i64> {
         if match_ci(b, ls, "expect:") {
             flags[7] = 1
         }
+        if match_ci(b, ls, "host:") {
+            if str_len(g_req_host) == 0 {
+                g_req_host = host_value_of(b, ls, le)
+            }
+        }
         ls = le + 2
     }
     return flags
+}
+
+// host 头取值：去首尾空白、剥离端口（"[" 开头视为 IPv6 字面量，原样保留）；保留原大小写。
+func host_value_of(b: table<i64>, ls: i64, le: i64) -> string {
+    var a = ls + 5
+    while a < le && (b[a] == 32 || b[a] == 9) {
+        a = a + 1
+    }
+    var e = le
+    while e > a && (b[e - 1] == 32 || b[e - 1] == 9) {
+        e = e - 1
+    }
+    var s = bytes_to_str(b, a, e)
+    if str_len(s) == 0 {
+        return s
+    }
+    if str_byte(s, 0) == 91 {
+        return s
+    }
+    var cpos = find_byte(s, 58)
+    if cpos >= 0 {
+        s = substr_bytes(s, 0, cpos)
+    }
+    return s
+}
+
+// host 模式匹配（大小写不敏感）：精确相等，或 "*.后缀"（须有余一标签，裸域不匹配）。
+func host_match(host: string, pat: string) -> bool {
+    var pn = str_len(pat)
+    if pn == 0 {
+        return false
+    }
+    if str_byte(pat, 0) == 42 && pn > 2 && str_byte(pat, 1) == 46 {
+        var suf = substr_bytes(pat, 1, pn)
+        var hn = str_len(host)
+        if hn <= str_len(suf) {
+            return false
+        }
+        return ci_ends_with(host, suf)
+    }
+    var hn2 = str_len(host)
+    if hn2 != pn {
+        return false
+    }
+    var i: i64 = 0
+    while i < pn {
+        if fold_lc(str_byte(host, i)) != fold_lc(str_byte(pat, i)) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// host 是否以（大小写不敏感）后缀 suf 结尾
+func ci_ends_with(host: string, suf: string) -> bool {
+    var hn = str_len(host)
+    var sn = str_len(suf)
+    if hn < sn {
+        return false
+    }
+    var i: i64 = 0
+    while i < sn {
+        if fold_lc(str_byte(host, hn - sn + i)) != fold_lc(str_byte(suf, i)) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// 解析请求主机对应文档根：首个匹配站点；无匹配 → 首个默认站点（"" host）；再无 → fallback。
+func pick_root(fallback: string) -> string {
+    if len(g_site_hosts) == 0 {
+        return fallback
+    }
+    var def_root: string = ""
+    var def_seen: i64 = 0
+    var i: i64 = 0
+    var n = len(g_site_hosts)
+    while i < n {
+        var pat = g_site_hosts[i]
+        if str_len(pat) == 0 {
+            if def_seen == 0 {
+                def_root = g_site_roots[i]
+                def_seen = 1
+            }
+        } else {
+            if host_match(g_req_host, pat) {
+                return g_site_roots[i]
+            }
+        }
+        i = i + 1
+    }
+    if def_seen == 1 {
+        return def_root
+    }
+    return fallback
 }
 
 // ---------- 请求体走查 ----------
@@ -583,7 +688,12 @@ pub func try_respond(buf: table<i64>, doc_root: string) -> (i64, table<i64>, i64
         return (-1, err_resp(431, "Request Header Fields Too Large", "header too large\n", 0, 1), consumed0)
     }
     var ver10 = g_req_ver10
+    g_req_host = ""
     var flags = scan_headers(buf, 0, hdr_end)
+    // HTTP/1.1 必须携带 Host（RFC 7230；1.0 无 Host 由默认站点/回落承接）
+    if ver10 == 0 && str_len(g_req_host) == 0 {
+        return (-1, err_resp(400, "Bad Request", "missing host\n", 0, 1), consumed0)
+    }
     // 走私防护组合：TE 与 CL 并存 / 重复 CL 一律拒绝
     if flags[1] == 1 && flags[3] == 1 {
         return (-1, err_resp(400, "Bad Request", "transfer-encoding with content-length\n", 0, 1), consumed0)
@@ -676,7 +786,8 @@ pub func try_respond(buf: table<i64>, doc_root: string) -> (i64, table<i64>, i64
     if str_len(dec) == 1 {
         fpath = "/index.html"
     }
-    var full = doc_root + fpath
+    var root_dir = pick_root(doc_root)
+    var full = root_dir + fpath
     if !fs.exists(full) {
         return (resp_state(close_flag), err_resp(404, "Not Found", "not found\n", head_only, close_flag), consumed)
     }
