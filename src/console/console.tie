@@ -6,13 +6,17 @@ type tie<class>
 // 0.1.0 雏形范围（记档）：
 //   - 行协议（telnet 可用）：欢迎语 + 逐行命令 + `exit`/`quit` 断连；
 //   - 管理命令：help / status / config / exit；
-//   - 下一步：tshell 模块静态装配（路线 A：repl/command/render 子集；设计稿 §8）。
-// 分层：socket I/O 经 ev（本地监听 + 连接表）；本层只做文本协议与命令分派。
+//   - tshell 静态装配（路线 A，tshell docs/embed.md）：repl 子集
+//     （repl/command/pipeline/render/session/observe + interp 后端链）直编入
+//     本进程；非管理命令行落入 tshell 求值（tie 表达式 → 内建命令 → 外部命令）。
+//     阻塞求值为雏形限制（慢求值会占用事件循环；0.2 执行体隔离）。
+// 分层：socket I/O 经 ev（本地监听 + 连接表）；本层做文本协议与命令分派。
 import "../ev/event_loop.tie"
 import "../conf/conf.tie"
+import "../../../tie-repo/tshell/src/repl.tie"
 
 // ---- 模块级全局（文件顶层）----
-var g_root: i64 = -1;                  // 配置根（-1 = 未装载，访问器走出厂默认）
+var g_console_root: i64 = -1;                  // 配置根（-1 = 未装载，访问器走出厂默认）
 var g_port: i64 = 0;                   // 服务端口（status 展示）
 var g_doc_root: string = "";           // 静态根（status 展示）
 var g_pconns: table<i64> = [];         // 会话连接
@@ -29,7 +33,7 @@ pub func start(pport: i64) -> i64 {
 
 // 注入运行上下文（status / config 展示用；conf 根未装载传 -1）。
 pub func set_ctx(root: i64, pport: i64, doc_root: string) -> i64 {
-    g_root = root
+    g_console_root = root
     g_port = pport
     g_doc_root = doc_root
     return 0
@@ -137,13 +141,26 @@ pub func dispatch(line: string) -> (i64, string) {
         return (1, status_text())
     }
     if t == "config" {
-        return (1, conf.summary(g_root))
+        return (1, conf.summary(g_console_root))
     }
-    return (1, "unknown command: " + t + "（help 查看命令）\n")
+    // 非管理命令：落入 tshell 求值（tie 表达式 → 内建命令 → 外部命令）
+    return (1, ensure_nl(repl.repl_handle(t)))
 }
 
 func help_text() -> string {
-    return "commands: help | status | config | exit\n"
+    return "leibnet: help | status | config | exit（其余输入交 tshell：tie 表达式 / 内建命令 / 管道）\n"
+}
+
+// 补行尾换行（行协议输出）。
+func ensure_nl(s: string) -> string {
+    var n = len(s)
+    if n == 0 {
+        return s
+    }
+    if str_byte(s, n - 1) == 10 {
+        return s
+    }
+    return s + "\n"
 }
 
 func status_text() -> string {
