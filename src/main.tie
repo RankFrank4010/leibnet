@@ -19,7 +19,7 @@ import "./ev/event_loop.tie" as evloop
 import "./http/http1.tie" as httpd
 import "./sys/net.tie"    // #cfg 门面，同上
 import "/std/args.tie" as cli
-import "/std/time.tie"    // 共享依赖（datetime 等内部裸引）：别名=单元级改名会断链，维持裸名
+import "/std/time.tie" as clock
 
 func main() {
     // ---- 阶段 1：CLI 解析 ----
@@ -127,7 +127,7 @@ func serve_loop(doc_root: string) {
             i = i + 3
         }
         // keep-alive 空闲回收（每轮一次；50ms 轮询粒度足够）
-        var idle = httpd.sweep(time.mono_ms())
+        var idle = httpd.sweep(clock.mono_ms())
         for c in idle {
             evloop.close_conn(c)
         }
