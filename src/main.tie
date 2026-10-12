@@ -11,9 +11,10 @@ type tie<logic>
 //              对外只暴露安全接口（规范 §5.11/§11.5 封装纪律）
 //   ev/        事件引擎：拉取式事件表 + 连接管理（event_loop.tie；定时器雏形随 0.2）
 //   http/      HTTP/1.1 协议面：请求解析 / 响应构造 / 静态服务（http1.tie）
-//   console/   tshell 内嵌雏形
+//   console/   本地控制台：tshell 内嵌雏形（设计稿 §8）
 //   obs/       观测：metrics / 结构化日志（横切）
 import "./conf/conf.tie"
+import "./console/console.tie"
 import "./ev/event_loop.tie"
 import "./http/http1.tie"
 import "./sys/net.tie"
@@ -41,6 +42,16 @@ func main() {
     // ---- 阶段 4：事件引擎启动（服务循环）----
     var pport = conf.get_int(root, "server.port", 8080)
     var doc_root = conf.get_str(root, "server.doc_root", "www")
+    // console（tshell 内嵌雏形）：出厂默认开、仅本地绑定；可配置关闭（设计稿 §8）
+    if conf.console_on(root) {
+        var cport = conf.console_port(root)
+        if console.start(cport) == 0 {
+            println("console 就绪: 127.0.0.1:" + to_string(cport))
+        } else {
+            println("console: 本地监听失败（port=" + to_string(cport) + "，err=" + to_string(net.last_error()) + "）")
+        }
+    }
+    console.set_ctx(root, pport, doc_root)
     if ev.start(pport) != 0 {
         println("leibnet: 监听失败（port=" + to_string(pport) + "，err=" + to_string(net.last_error()) + "）")
         return
@@ -49,7 +60,7 @@ func main() {
     serve_loop(doc_root)
 }
 
-// 服务循环（单线程事件引擎；0.1.0：GET/HEAD 静态服务）
+// 服务循环（单线程事件引擎；0.1.0：GET/HEAD 静态服务 + 本地 console 分派）
 func serve_loop(doc_root: string) {
     while true {
         var es = ev.poll(50000)
@@ -67,6 +78,24 @@ func serve_loop(doc_root: string) {
                 } else if len(data) > 65536 {
                     // 请求头超限（0.1.0：简单防护，超限断开）
                     ev.close_conn(conn)
+                }
+            } else if kind == 3 {
+                // 新 console 会话：欢迎语
+                ev.send(conn, console.bytes_of(console.greet()))
+            } else if kind == 4 {
+                if extra > 0 {
+                    var cdata = ev.take(conn)
+                    var (creq, cresp) = console.feed(conn, cdata)
+                    if len(cresp) > 0 {
+                        ev.send(conn, console.bytes_of(cresp))
+                    }
+                    if creq == 1 {
+                        console.forget(conn)
+                        ev.close_conn(conn)
+                    }
+                } else {
+                    // 对端关闭：清会话状态
+                    console.forget(conn)
                 }
             }
             i = i + 3

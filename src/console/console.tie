@@ -1,0 +1,233 @@
+type tie<class>
+// src/console/console.tie —— 本地控制台（tshell 内嵌雏形 · 0.1.0）
+// ============================================================
+// 归属：控制面横切层「tshell 控制台」（设计稿 §3 / §8）：
+//   console 出厂默认开、仅本地绑定（127.0.0.1）；可配置关闭；远程需显式配置 + 认证。
+// 0.1.0 雏形范围（记档）：
+//   - 行协议（telnet 可用）：欢迎语 + 逐行命令 + `exit`/`quit` 断连；
+//   - 管理命令：help / status / config / exit；
+//   - 下一步：tshell 模块静态装配（路线 A：repl/command/render 子集；设计稿 §8）。
+// 分层：socket I/O 经 ev（本地监听 + 连接表）；本层只做文本协议与命令分派。
+import "../ev/event_loop.tie"
+import "../conf/conf.tie"
+
+// ---- 模块级全局（文件顶层）----
+var g_root: i64 = -1;                  // 配置根（-1 = 未装载，访问器走出厂默认）
+var g_port: i64 = 0;                   // 服务端口（status 展示）
+var g_doc_root: string = "";           // 静态根（status 展示）
+var g_pconns: table<i64> = [];         // 会话连接
+var g_pends: table<table<i64>> = [];   // 每会话残行缓冲（未含 \n 的尾部）
+
+namespace console {
+
+// ---------- 启动与上下文 ----------
+
+// 启动本地控制台监听（127.0.0.1）；成功 0，失败 -1。
+pub func start(pport: i64) -> i64 {
+    return ev.start_console(pport)
+}
+
+// 注入运行上下文（status / config 展示用；conf 根未装载传 -1）。
+pub func set_ctx(root: i64, pport: i64, doc_root: string) -> i64 {
+    g_root = root
+    g_port = pport
+    g_doc_root = doc_root
+    return 0
+}
+
+// ---------- 会话 ----------
+
+// 新连接欢迎语。
+pub func greet() -> string {
+    return "leibnet console 0.1.0 —— 本地控制台（help 查看命令）\n"
+}
+
+// 字符串 → 字节表（控制台文本逐字节）。
+pub func bytes_of(s: string) -> table<i64> {
+    var out: table<i64> = []
+    var i: i64 = 0
+    var n = len(s)
+    while i < n {
+        table_push(out, str_byte(s, i))
+        i = i + 1
+    }
+    return out
+}
+
+// 处理一段已收字节：完整行（\n 定界，剥 \r）逐行分派；残行留待续收。
+// 返回 (close_req, resp)：close_req 1 = 会话应关闭。
+pub func feed(conn: i64, data: table<i64>) -> (i64, string) {
+    var pend = pend_get(conn)
+    for x in data {
+        table_push(pend, x)
+    }
+    var out = ""
+    var close_req: i64 = 0
+    var n = len(pend)
+    var start: i64 = 0
+    var i: i64 = 0
+    while i < n {
+        if pend[i] == 10 {
+            var e = i
+            if e > start && pend[e - 1] == 13 {
+                e = e - 1
+            }
+            var line = bytes_to_str(pend, start, e)
+            var (req, resp) = dispatch(line)
+            out = out + resp
+            if req == -1 {
+                close_req = 1
+            }
+            start = i + 1
+        }
+        i = i + 1
+    }
+    var rest: table<i64> = []
+    var k = start
+    while k < n {
+        table_push(rest, pend[k])
+        k = k + 1
+    }
+    pend_put(conn, rest)
+    return (close_req, out)
+}
+
+// 丢弃会话状态（连接关闭时调用）。
+pub func forget(conn: i64) -> i64 {
+    var i: i64 = 0
+    var n = len(g_pconns)
+    while i < n {
+        if g_pconns[i] == conn {
+            g_pconns[i] = -1
+            var nb: table<i64> = []
+            g_pends[i] = nb
+            return 0
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// 活动会话数（观测）。
+pub func sessions() -> i64 {
+    var c: i64 = 0
+    for x in g_pconns {
+        if x >= 0 {
+            c = c + 1
+        }
+    }
+    return c
+}
+
+// ---------- 命令分派（纯函数；探针可直接调用） ----------
+
+// 单行分派：返回 (状态, 响应文本)；状态 -1 = 请求关闭，0 = 无响应，1 = 有响应。
+pub func dispatch(line: string) -> (i64, string) {
+    var t = trim_ws(line)
+    if str_len(t) == 0 {
+        return (0, "")
+    }
+    if t == "exit" || t == "quit" || t == ":q" {
+        return (-1, "bye\n")
+    }
+    if t == "help" || t == "?" {
+        return (1, help_text())
+    }
+    if t == "status" {
+        return (1, status_text())
+    }
+    if t == "config" {
+        return (1, conf.summary(g_root))
+    }
+    return (1, "unknown command: " + t + "（help 查看命令）\n")
+}
+
+func help_text() -> string {
+    return "commands: help | status | config | exit\n"
+}
+
+func status_text() -> string {
+    var s = "leibnet 0.1.0-dev\n"
+    s = s + "listen      = :" + to_string(g_port) + "\n"
+    s = s + "doc_root    = " + g_doc_root + "\n"
+    s = s + "connections = " + to_string(ev.conn_count()) + "\n"
+    s = s + "sessions    = " + to_string(sessions()) + "\n"
+    return s
+}
+
+// ---------- 内部小工具 ----------
+
+// 行首尾空白裁剪（空格/制表；逐字节判断）。
+func trim_ws(s: string) -> string {
+    var n = len(s)
+    var a: i64 = 0
+    var hit: i64 = 0
+    while a < n && hit == 0 {
+        var c = str_byte(s, a)
+        if c == 32 || c == 9 {
+            a = a + 1
+        } else {
+            hit = 1
+        }
+    }
+    var b = n
+    var hit2: i64 = 0
+    while b > a && hit2 == 0 {
+        var c2 = str_byte(s, b - 1)
+        if c2 == 32 || c2 == 9 || c2 == 13 {
+            b = b - 1
+        } else {
+            hit2 = 1
+        }
+    }
+    var sb = string_builder()
+    var i = a
+    while i < b {
+        sb_append_byte(sb, str_byte(s, i))
+        i = i + 1
+    }
+    return sb_build(sb)
+}
+
+// 字节区间 [a, e) → 字符串。
+func bytes_to_str(b: table<i64>, a: i64, e: i64) -> string {
+    var sb = string_builder()
+    var i = a
+    var n = len(b)
+    while i < e && i < n {
+        sb_append_byte(sb, b[i])
+        i = i + 1
+    }
+    return sb_build(sb)
+}
+
+// 会话残行缓冲：取（无则登记新会话）。
+func pend_get(conn: i64) -> table<i64> {
+    var i: i64 = 0
+    var n = len(g_pconns)
+    while i < n {
+        if g_pconns[i] == conn {
+            return g_pends[i]
+        }
+        i = i + 1
+    }
+    table_push(g_pconns, conn)
+    var nb: table<i64> = []
+    table_push(g_pends, nb)
+    return nb
+}
+
+// 会话残行缓冲：写回。
+func pend_put(conn: i64, buf: table<i64>) -> i64 {
+    var i: i64 = 0
+    var n = len(g_pconns)
+    while i < n {
+        if g_pconns[i] == conn {
+            g_pends[i] = buf
+            return 0
+        }
+        i = i + 1
+    }
+    return -1
+}
+}

@@ -71,8 +71,8 @@ pub func init() -> bool {
 
 // ---------- 监听 ----------
 
-// 建立监听套接字（0.0.0.0:pport + listen + 非阻塞）；失败 -1。
-pub func listen_tcp(pport: i64) -> i64 {
+// 内部：建立监听套接字（looponly=1 时绑定 127.0.0.1，否则 0.0.0.0）+ listen + 非阻塞。
+func listen_at(pport: i64, looponly: i64) -> i64 {
     var s: i64 = 0
     var st: i64 = 0
     unsafe {
@@ -89,6 +89,12 @@ pub func listen_tcp(pport: i64) -> i64 {
             deref_write(sa, to_u8(2))                                 // AF_INET = 2
             deref_write(ptr_add(sa, 2), to_u8((pport >> 8) & 255))    // 端口大端
             deref_write(ptr_add(sa, 3), to_u8(pport & 255))
+            if looponly == 1 {                                        // 仅回环（127.0.0.1）
+                deref_write(ptr_add(sa, 4), to_u8(127))
+                deref_write(ptr_add(sa, 5), to_u8(0))
+                deref_write(ptr_add(sa, 6), to_u8(0))
+                deref_write(ptr_add(sa, 7), to_u8(1))
+            }
             if bind(to_i32(s), sa, 16) != 0 {
                 st = 2
             } else if listen(to_i32(s), 8) != 0 {
@@ -106,6 +112,16 @@ pub func listen_tcp(pport: i64) -> i64 {
         return -1
     }
     return s
+}
+
+// 建立监听套接字（0.0.0.0:pport）；失败 -1。
+pub func listen_tcp(pport: i64) -> i64 {
+    return listen_at(pport, 0)
+}
+
+// 建立仅回环监听套接字（127.0.0.1:pport；本地控制台绑定用）；失败 -1。
+pub func listen_tcp_loop(pport: i64) -> i64 {
+    return listen_at(pport, 1)
 }
 
 // 接受连接（非阻塞）；无连接或失败返回 -1。

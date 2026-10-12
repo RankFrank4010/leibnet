@@ -1,11 +1,12 @@
 type tie<class>
 // src/ev/event_loop.tie —— 单线程事件引擎（0.1.0 骨架）
 // ============================================================
-// 职责：监听套接字 + 连接集合管理 + select 就绪轮询 + 每连接读缓冲。
+// 职责：监听套接字（服务 + 本地 console 双监听）+ 连接集合管理 + select 就绪轮询 + 每连接读缓冲。
 // 风格：拉取式（pull）——上层循环调用 ev.poll(timeout_us)，按事件表处理：
 //   事件表为扁平三元组重复 [kind, conn, extra]：
-//     kind=1 新连接（extra=0）；kind=2 可读（extra=本次读入字节数；0=对端关闭，
-//     连接已被移除）。
+//     kind=1 服务新连接（extra=0）；kind=2 服务连接可读（extra=本次读入字节数；
+//     0=对端关闭，连接已被移除）；
+//     kind=3/4 = 本地 console 连接 新连接/可读（extra 语义同 1/2）。
 //   读入字节进连接缓冲，上层经 ev.take(conn) 取走（取走即清空）。
 // 分层：网络细节经 src/sys/net.tie 门面（平台无关）；本层零 unsafe。
 // 说明：模块级全局 = 单循环假设（多循环/多 worker 留待 0.2 进程模型）。
@@ -13,14 +14,17 @@ type tie<class>
 import "../sys/net.tie"
 
 // ---- 模块级全局（文件顶层）----
-var g_srv: i64 = 0;                    // 监听套接字（0 = 未启动）
-var g_conns: table<i64> = [];          // 活跃连接（-1 = 已关闭占位）
-var g_bufs: table<table<i64>> = [];    // 每连接读缓冲（与 g_conns 下标对齐）
+var g_srv: i64 = 0;                    // 服务监听套接字（0 = 未启动）
+var g_conns: table<i64> = [];          // 服务活跃连接（-1 = 已关闭占位）
+var g_bufs: table<table<i64>> = [];    // 服务每连接读缓冲（与 g_conns 下标对齐）
 var g_running: i64 = 0;                // 是否已启动
+var g_csrv: i64 = 0;                   // 本地 console 监听套接字（0 = 未启动）
+var g_cconns: table<i64> = [];         // console 活跃连接
+var g_cbufs: table<table<i64>> = [];   // console 每连接读缓冲
 
 namespace ev {
 
-// 启动监听；成功 0，失败 -1（错误见 net.last_error）。
+// 启动服务监听；成功 0，失败 -1（错误见 net.last_error）。
 pub func start(pport: i64) -> i64 {
     if !net.init() {
         return -1
@@ -34,6 +38,20 @@ pub func start(pport: i64) -> i64 {
     return 0
 }
 
+// 启动本地 console 监听（127.0.0.1；设计稿 §8 仅本地绑定）；成功 0，失败 -1。
+pub func start_console(pport: i64) -> i64 {
+    if !net.init() {
+        return -1
+    }
+    var s = net.listen_tcp_loop(pport)
+    if s < 0 {
+        return -1
+    }
+    g_csrv = s
+    g_running = 1
+    return 0
+}
+
 // 轮询一轮；返回事件表（扁平三元组，见文件头）。timeout_us 微秒（0 = 立即）。
 pub func poll(timeout_us: i64) -> table<i64> {
     var events: table<i64> = []
@@ -41,15 +59,25 @@ pub func poll(timeout_us: i64) -> table<i64> {
         return events
     }
     var watch: table<i64> = []
-    table_push(watch, g_srv)
+    if g_srv > 0 {
+        table_push(watch, g_srv)
+    }
+    if g_csrv > 0 {
+        table_push(watch, g_csrv)
+    }
     for c in g_conns {
         if c >= 0 {
             table_push(watch, c)
         }
     }
+    for c2 in g_cconns {
+        if c2 >= 0 {
+            table_push(watch, c2)
+        }
+    }
     var ready = net.select_read(watch, timeout_us)
     for h in ready {
-        if h == g_srv {
+        if g_srv > 0 && h == g_srv {
             var nc = net.accept_nb(g_srv)
             if nc >= 0 {
                 table_push(g_conns, nc)
@@ -59,7 +87,17 @@ pub func poll(timeout_us: i64) -> table<i64> {
                 table_push(events, nc)
                 table_push(events, 0)
             }
-        } else {
+        } else if g_csrv > 0 && h == g_csrv {
+            var nc2 = net.accept_nb(g_csrv)
+            if nc2 >= 0 {
+                table_push(g_cconns, nc2)
+                var b2: table<i64> = []
+                table_push(g_cbufs, b2)
+                table_push(events, 3)
+                table_push(events, nc2)
+                table_push(events, 0)
+            }
+        } else if conn_side(h) == 0 {
             var (data, st) = net.recv_bytes(h, 8192)
             if st == 1 {
                 append_to_conn(h, data)
@@ -69,6 +107,19 @@ pub func poll(timeout_us: i64) -> table<i64> {
             } else if st == 0 {
                 do_close(h)
                 table_push(events, 2)
+                table_push(events, h)
+                table_push(events, 0)
+            }
+        } else if conn_side(h) == 1 {
+            var (cdata, cst) = net.recv_bytes(h, 8192)
+            if cst == 1 {
+                append_to_c(h, cdata)
+                table_push(events, 4)
+                table_push(events, h)
+                table_push(events, len(cdata))
+            } else if cst == 0 {
+                close_c(h)
+                table_push(events, 4)
                 table_push(events, h)
                 table_push(events, 0)
             }
@@ -82,7 +133,7 @@ pub func send(h: i64, data: table<i64>) -> i64 {
     return net.send_bytes(h, data)
 }
 
-// 取走连接已收字节（清空缓冲）；无此连接返回空表。
+// 取走连接已收字节（清空缓冲）；无此连接返回空表。服务/console 连接通用。
 pub func take(h: i64) -> table<i64> {
     var out: table<i64> = []
     var i: i64 = 0
@@ -96,15 +147,30 @@ pub func take(h: i64) -> table<i64> {
         }
         i = i + 1
     }
+    var j: i64 = 0
+    var m = len(g_cconns)
+    while j < m {
+        if g_cconns[j] == h {
+            var cb = g_cbufs[j]
+            var nb2: table<i64> = []
+            g_cbufs[j] = nb2
+            return cb
+        }
+        j = j + 1
+    }
     return out
 }
 
-// 主动关闭连接（移除 + 关套接字）。
+// 主动关闭连接（移除 + 关套接字；服务/console 连接通用）。
 pub func close_conn(h: i64) -> i64 {
-    return do_close(h)
+    var r = do_close(h)
+    if r == 0 {
+        return 0
+    }
+    return close_c(h)
 }
 
-// 活跃连接数（观测/测试用）。
+// 服务活跃连接数（观测/测试用）。
 pub func conn_count() -> i64 {
     var c: i64 = 0
     for x in g_conns {
@@ -115,7 +181,28 @@ pub func conn_count() -> i64 {
     return c
 }
 
-// 内部：追加到连接缓冲（读出-改-写回；COW 语义下值正确）。
+// 内部：句柄归属（0 = 服务连接，1 = console 连接，-1 = 未知）
+func conn_side(h: i64) -> i64 {
+    var i: i64 = 0
+    var n = len(g_conns)
+    while i < n {
+        if g_conns[i] == h {
+            return 0
+        }
+        i = i + 1
+    }
+    var j: i64 = 0
+    var m = len(g_cconns)
+    while j < m {
+        if g_cconns[j] == h {
+            return 1
+        }
+        j = j + 1
+    }
+    return -1
+}
+
+// 内部：追加到服务连接缓冲（读出-改-写回；COW 语义下值正确）。
 func append_to_conn(h: i64, data: table<i64>) -> i64 {
     var i: i64 = 0
     var n = len(g_conns)
@@ -133,7 +220,25 @@ func append_to_conn(h: i64, data: table<i64>) -> i64 {
     return -1
 }
 
-// 内部：移除连接并关闭。
+// 内部：追加到 console 连接缓冲。
+func append_to_c(h: i64, data: table<i64>) -> i64 {
+    var i: i64 = 0
+    var n = len(g_cconns)
+    while i < n {
+        if g_cconns[i] == h {
+            var b = g_cbufs[i]
+            for x in data {
+                table_push(b, x)
+            }
+            g_cbufs[i] = b
+            return 0
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// 内部：移除服务连接并关闭。
 func do_close(h: i64) -> i64 {
     var i: i64 = 0
     var n = len(g_conns)
@@ -142,6 +247,23 @@ func do_close(h: i64) -> i64 {
             g_conns[i] = -1
             var nb: table<i64> = []
             g_bufs[i] = nb
+            net.close_sock(h)
+            return 0
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// 内部：移除 console 连接并关闭。
+func close_c(h: i64) -> i64 {
+    var i: i64 = 0
+    var n = len(g_cconns)
+    while i < n {
+        if g_cconns[i] == h {
+            g_cconns[i] = -1
+            var nb: table<i64> = []
+            g_cbufs[i] = nb
             net.close_sock(h)
             return 0
         }
