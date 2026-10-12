@@ -19,6 +19,7 @@ import "./ev/event_loop.tie"
 import "./http/http1.tie"
 import "./sys/net.tie"
 import "/std/args.tie" as args
+import "/std/time.tie"
 
 func main() {
     // ---- 阶段 1：CLI 解析 ----
@@ -52,6 +53,8 @@ func main() {
         }
     }
     console.set_ctx(root, pport, doc_root)
+    // http 数据面限额（判据单一来源在 conf；启动注入）
+    http1.set_limits(conf.http_max_header(root), conf.http_max_body(root), conf.http_keepalive_ms(root))
     if ev.start(pport) != 0 {
         println("leibnet: 监听失败（port=" + to_string(pport) + "，err=" + to_string(net.last_error()) + "）")
         return
@@ -70,16 +73,18 @@ func serve_loop(doc_root: string) {
             var kind = es[i]
             var conn = es[i + 1]
             var extra = es[i + 2]
-            if kind == 2 {
+            if kind == 1 {
+                // 新服务连接：登记（空闲回收覆盖沉默连接）
+                http1.note_conn(conn)
+            } else if kind == 2 {
                 if extra > 0 {
                     var data = ev.take(conn)
                     var (st, resp) = http1.feed(conn, data, doc_root)
                     if len(resp) > 0 {
                         ev.send(conn, resp)
                     }
-                    if st == -1 {
-                        ev.close_conn(conn)
-                    }
+                    // st == -1：排空关闭（linger）——不立即断开，防 RST 丢弃刚发出的响应；
+                    // 由 http1 排空余量、对端 FIN 或 sweep 截止回收
                 } else {
                     // 对端关闭：清残帧状态
                     http1.forget(conn)
@@ -104,6 +109,11 @@ func serve_loop(doc_root: string) {
                 }
             }
             i = i + 3
+        }
+        // keep-alive 空闲回收（每轮一次；50ms 轮询粒度足够）
+        var idle = http1.sweep(time.mono_ms())
+        for c in idle {
+            ev.close_conn(c)
         }
     }
 }

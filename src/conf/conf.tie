@@ -74,6 +74,27 @@ pub func console_port(root: i64) -> i64 {
     return get_int(root, "console.port", 7719)
 }
 
+// ---------- http（数据面限额；出厂默认见设计稿 §6 精神：可配、多数够用） ----------
+
+// keep-alive 空闲回收毫秒（配置值为秒；0/负 = 不回收）。
+pub func http_keepalive_ms(root: i64) -> i64 {
+    var s = get_int(root, "http.keepalive_timeout", 60)
+    if s <= 0 {
+        return 0
+    }
+    return s * 1000
+}
+
+// 请求体上限（字节；超出 413）。
+pub func http_max_body(root: i64) -> i64 {
+    return get_int(root, "http.max_body", 1048576)
+}
+
+// 请求头/未解析缓冲上限（字节；超出 431）。
+pub func http_max_header(root: i64) -> i64 {
+    return get_int(root, "http.max_header", 16384)
+}
+
 // ---------- 启动摘要 ----------
 
 // 配置摘要（启动打印；展示当前生效的关键项）。
