@@ -23,7 +23,7 @@ unsafe extern fn WSAGetLastError() -> i32
 // ---- 模块级全局（文件顶层）----
 var g_wsa_ok: i64 = 0;      // WSAStartup 一次性标志（零值即未初始化，语义正确）
 
-namespace netw {
+namespace net {
 
 // ---------- 小工具（4 字节 LE 读写；fd_set/timeval 布局用） ----------
 

@@ -26,7 +26,7 @@ unsafe extern fn epoll_wait(epfd: i32, evs: ptr<u8>, maxev: i32, timeout_ms: i32
 var g_epfd: i64 = 0;        // epoll 实例（0 = 未创建；负数 = 失败）
 var g_reg: table<i64> = []; // 已注册 fd 清单（差集维护用）
 
-namespace netp {
+namespace net {
 
 // ---------- 小工具 ----------
 
