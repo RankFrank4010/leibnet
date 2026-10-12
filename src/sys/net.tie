@@ -1,0 +1,12 @@
+type tie<class>
+// src/sys/net.tie —— 平台层网络门面（平台选择：#cfg 条件编译，p.9.11.13）
+// ============================================================
+// 与平台实现同目录：net_win.tie = Winsock2/select；net_posix.tie = epoll。
+// 接口同名、namespace 统一为 net；#cfg 在词法前按目标三元组裁剪，仅一个实现
+// 进入编译单元（依赖 tiec 的「被导入文件 #cfg 预处理」支持，acdb034）。
+// 凭据：mem 域由各实现文件头部自声明（文件级授权只作用本文件）。
+#cfg(os=windows)
+import "./net_win.tie"
+#else
+import "./net_posix.tie"
+#end
