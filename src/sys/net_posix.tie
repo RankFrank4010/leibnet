@@ -1,7 +1,7 @@
 type tie<class, unsafe:mem>
-// src/net_posix.tie —— POSIX（Linux）网络底座（epoll）
+// src/sys/net_posix.tie —— POSIX（Linux）网络底座（epoll）
 // ============================================================
-// 与 src/net_win.tie 接口同名（init/listen_tcp/accept_nb/select_read/
+// 与 src/sys/net_win.tie 接口同名（init/listen_tcp/accept_nb/select_read/
 // recv_bytes/send_bytes/close_sock/last_error），平台差异内置：
 //   - 免初始化（无 WSAStartup）；
 //   - 非阻塞用 fcntl(F_SETFL, O_NONBLOCK)；

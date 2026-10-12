@@ -6,7 +6,8 @@ type tie<logic>
 //   main.tie   入口与编排：CLI → 配置 → 摘要 →（0.1.0 后续）事件引擎启动
 //   conf/      控制面·配置：td 装载 + 带出厂默认的访问器（ns conf）
 //   —— 已划定归属、随任务落位（0.1.0 路线内）——
-//   sys/       平台层：unsafe extern 收敛（win32 select / Linux epoll 直调），
+//   sys/       平台层：unsafe extern 收敛——src/sys/net_win.tie（ns netw，win32
+//              select）与 src/sys/net_posix.tie（ns netp，Linux epoll）接口同名，
 //              对外只暴露安全接口（规范 §5.11/§11.5 封装纪律）
 //   ev/        事件引擎：统一事件接口 + 连接管理 + 定时器雏形
 //   http/      HTTP/1.1 协议面：请求解析 / 响应构造 / 静态服务

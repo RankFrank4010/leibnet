@@ -1,10 +1,10 @@
 type tie<class, unsafe:mem>
-// src/net_win.tie —— Windows 网络底座（Winsock2 extern 直绑）
+// src/sys/net_win.tie —— Windows 网络底座（Winsock2 extern 直绑）
 // ============================================================
 // 定位（设计稿 §3 事件引擎）：非阻塞 socket + select 就绪侦测的最小实现。
 // 接口契约：句柄 = 原生 SOCKET（i64 承载）；失败统一 -1 / 空表。
 // 凭据纪律：库内持 mem 凭据，对外全部安全函数（调用方零 unsafe）。
-// 平台：Windows；Linux 对应实现 src/net_posix.tie（接口同名）。
+// 平台：Windows；Linux 对应实现 src/sys/net_posix.tie（接口同名）。
 // 实测布局：Windows fd_set = {u32 count; pad4; SOCKET[64]}（offset 8 起，520B）；
 //          FIONBIO = 0x8004667E（i32 补码 -2147195266）。
 // 参考验收：探针区 probe_event2 / echo_serve（不入库）。
