@@ -6,7 +6,7 @@ type tie<class>
 // 进入编译单元（依赖 tiec 的「被导入文件 #cfg 预处理」支持，acdb034）。
 // 凭据：mem 域由各实现文件头部自声明（文件级授权只作用本文件）。
 #cfg(os=windows)
-import "./net_win.tie"
+import "./net_win.tie"     // #cfg 门面实现片段：维持原名 net（别名改名会破坏统一命名空间）
 #else
-import "./net_posix.tie"
+import "./net_posix.tie"  // 同上
 #end

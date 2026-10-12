@@ -14,11 +14,11 @@ type tie<class>
 //   非 GET/HEAD/OPTIONS ⇒ 405 + Allow；头部超限 431；Date/Server 头。
 // 限额（set_limits 注入）：max_header / max_body / keepalive_ms（0 = 不回收）。
 // 不支持（记档）：100-continue 真等待、range、gzip、写缓冲 —— 后续批。
-// 依赖：/std/fs.tie（读文件字节）、/std/time.tie（单调时钟）、/std/datetime.tie（Date）。
-import "/std/fs.tie" as fs
-import "/std/time.tie"
-import "/std/datetime.tie"
-import "./proxy.tie"
+// 依赖：/std/files.tie（读文件字节）、/std/time.tie（单调时钟）、/std/dates.tie（Date）。
+import "/std/fs.tie" as files
+import "/std/time.tie"    // 共享依赖（datetime 等内部裸引）：别名=单元级改名会断链，维持裸名
+import "/std/datetime.tie" as dates
+import "./proxy.tie" as rproxy
 
 // ---- 模块级全局（文件顶层）----
 var g_hconns: table<i64> = [];          // 活跃 http 连接（残帧表）
@@ -322,7 +322,7 @@ func pad4(n: i64) -> string {
 
 // HTTP-date（RFC 7231 IMF-fixdate，不含 "Date: " 前缀）："Sun, 12 Oct 2026 07:20:00 GMT"
 func http_date_now() -> string {
-    var dt = datetime.now()
+    var dt = dates.now()
     var wds = "SunMonTueWedThuFriSat"
     var mns = "JanFebMarAprMayJunJulAugSepOctNovDec"
     var wd = substr_bytes(wds, dt.wday * 3, dt.wday * 3 + 3)
@@ -757,7 +757,7 @@ pub func try_respond(buf: table<i64>, doc_root: string) -> (i64, table<i64>, i64
         if force_close == 1 {
             return (1, str_to_bytes("HTTP/1.1 100 Continue\r\n\r\n"), consumed0)
         }
-        return (-1, proxy.forward(up, buf, consumed0, consumed, flags[2], g_req_host), consumed)
+        return (-1, rproxy.forward(up, buf, consumed0, consumed, flags[2], g_req_host), consumed)
     }
     // 连接语义：1.1 默认保持 / 1.0 默认关闭；Connection 头覆盖；Expect 直答后关闭
     var keep: i64 = 1
@@ -805,10 +805,10 @@ pub func try_respond(buf: table<i64>, doc_root: string) -> (i64, table<i64>, i64
         fpath = "/index.html"
     }
     var full = root_dir + fpath
-    if !fs.exists(full) {
+    if !files.exists(full) {
         return (resp_state(close_flag), err_resp(404, "Not Found", "not found\n", head_only, close_flag), consumed)
     }
-    var body = fs.read_bytes(full)
+    var body = files.read_bytes(full)
     return (resp_state(close_flag), build_response(200, "OK", content_type_of(fpath), body, head_only, close_flag, ""), consumed)
 }
 

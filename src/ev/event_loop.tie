@@ -11,7 +11,7 @@ type tie<class>
 // 分层：网络细节经 src/sys/net.tie 门面（平台无关）；本层零 unsafe。
 // 说明：模块级全局 = 单循环假设（多循环/多 worker 留待 0.2 进程模型）。
 // 参考验收：探针区 probe_ev（不入库）。
-import "../sys/net.tie"
+import "../sys/net.tie"   // #cfg 门面（无自身 ns，别名改名在展开前无效）——按 net.* 调用
 
 // ---- 模块级全局（文件顶层）----
 var g_srv: i64 = 0;                    // 服务监听套接字（0 = 未启动）

@@ -10,7 +10,7 @@ type tie<class>
 // 数据流：出厂默认（访问点常量）→ 配置文件（--config / 探测）→（后续）CLI 覆盖。
 // 解耦走向：td 解析器提炼入 tlib/std 后（task #8），本模块 import 改库根别名，
 // 解除对 tiec 仓路径的引用。
-import "../../../tie-repo/tiec/compiler/config.tie"
+import "../../../tie-repo/tiec/compiler/config.tie" as tdcfg
 
 namespace conf {
 
@@ -21,12 +21,12 @@ pub func load(path: string) -> i64 {
     if str_len(path) == 0 {
         return -1
     }
-    return config.parse_file(path)
+    return tdcfg.parse_file(path)
 }
 
 // 最近一次装载/解析的错误消息（成功时为空串）。
 pub func last_error() -> string {
-    return config.err_msg()
+    return tdcfg.err_msg()
 }
 
 // ---------- 访问器（带出厂默认；root < 0 时直接返回默认） ----------
@@ -36,30 +36,30 @@ pub func get_str(root: i64, path: string, dflt: string) -> string {
     if root < 0 {
         return dflt
     }
-    if config.path_get(root, path) < 0 {
+    if tdcfg.path_get(root, path) < 0 {
         return dflt
     }
-    return config.get_str(root, path)
+    return tdcfg.get_str(root, path)
 }
 
 pub func get_int(root: i64, path: string, dflt: i64) -> i64 {
     if root < 0 {
         return dflt
     }
-    if config.path_get(root, path) < 0 {
+    if tdcfg.path_get(root, path) < 0 {
         return dflt
     }
-    return config.get_int(root, path)
+    return tdcfg.get_int(root, path)
 }
 
 pub func get_bool(root: i64, path: string, dflt: bool) -> bool {
     if root < 0 {
         return dflt
     }
-    if config.path_get(root, path) < 0 {
+    if tdcfg.path_get(root, path) < 0 {
         return dflt
     }
-    return config.get_bool(root, path)
+    return tdcfg.get_bool(root, path)
 }
 
 // ---------- console（本地控制面；出厂默认 = 设计稿 §6.2 / §8，判据单一来源） ----------
@@ -102,11 +102,11 @@ pub func site_count(root: i64) -> i64 {
     if root < 0 {
         return 0
     }
-    var arr = config.path_get(root, "sites")
+    var arr = tdcfg.path_get(root, "sites")
     if arr < 0 {
         return 0
     }
-    return config.arr_len(arr)
+    return tdcfg.arr_len(arr)
 }
 
 // 站点 i 的 host 模式（空串 = 默认站点/未声明；支持 "*.后缀" 通配）。
@@ -114,19 +114,19 @@ pub func site_host(root: i64, i: i64) -> string {
     if root < 0 {
         return ""
     }
-    var arr = config.path_get(root, "sites")
+    var arr = tdcfg.path_get(root, "sites")
     if arr < 0 {
         return ""
     }
-    var site = config.arr_at(arr, i)
+    var site = tdcfg.arr_at(arr, i)
     if site < 0 {
         return ""
     }
-    var hn = config.map_get(site, "host")
+    var hn = tdcfg.map_get(site, "host")
     if hn < 0 {
         return ""
     }
-    return config.str_val(hn)
+    return tdcfg.str_val(hn)
 }
 
 // 站点 i 的文档根（缺失回落 dflt，通常传 server.doc_root）。
@@ -134,11 +134,11 @@ pub func site_doc_root(root: i64, i: i64, dflt: string) -> string {
     if root < 0 {
         return dflt
     }
-    var arr = config.path_get(root, "sites")
+    var arr = tdcfg.path_get(root, "sites")
     if arr < 0 {
         return dflt
     }
-    var site = config.arr_at(arr, i)
+    var site = tdcfg.arr_at(arr, i)
     if site < 0 {
         return dflt
     }
@@ -150,19 +150,19 @@ pub func site_upstream(root: i64, i: i64) -> string {
     if root < 0 {
         return ""
     }
-    var arr = config.path_get(root, "sites")
+    var arr = tdcfg.path_get(root, "sites")
     if arr < 0 {
         return ""
     }
-    var site = config.arr_at(arr, i)
+    var site = tdcfg.arr_at(arr, i)
     if site < 0 {
         return ""
     }
-    var un = config.map_get(site, "upstream")
+    var un = tdcfg.map_get(site, "upstream")
     if un < 0 {
         return ""
     }
-    return config.str_val(un)
+    return tdcfg.str_val(un)
 }
 
 // ---------- 启动摘要 ----------

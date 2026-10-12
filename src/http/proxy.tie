@@ -10,8 +10,8 @@ type tie<class>
 //   与 0.2 进程模型一并改造）。
 // 错误：连接失败/拒绝 → 502；超时 → 504；空响应 → 502（本地小响应，不走上游）。
 // 依赖：src/sys/net.tie（门面）、/std/time.tie（单调时钟）。
-import "../sys/net.tie"
-import "/std/time.tie"
+import "../sys/net.tie"   // #cfg 门面，同上
+import "/std/time.tie"    // 共享依赖（datetime 等内部裸引）：别名=单元级改名会断链，维持裸名
 
 // ---- 模块级全局（文件顶层）----
 var g_conn_ms: i64 = 2000;              // 连接/发送阶段截止（毫秒）

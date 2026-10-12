@@ -10,68 +10,68 @@ type tie<logic>
 //              net_posix.tie（epoll）经 #cfg 门面 net.tie 二选一（ns 统一为 net），
 //              对外只暴露安全接口（规范 §5.11/§11.5 封装纪律）
 //   ev/        事件引擎：拉取式事件表 + 连接管理（event_loop.tie；定时器雏形随 0.2）
-//   http/      HTTP/1.1 协议面：请求解析 / 响应构造 / 静态服务（http1.tie）
+//   http/      HTTP/1.1 协议面：请求解析 / 响应构造 / 静态服务（httpd.tie）
 //   console/   本地控制台：tshell 内嵌雏形（设计稿 §8）
 //   obs/       观测：metrics / 结构化日志（横切）
-import "./conf/conf.tie"
-import "./console/console.tie"
-import "./ev/event_loop.tie"
-import "./http/http1.tie"
-import "./sys/net.tie"
-import "/std/args.tie" as args
-import "/std/time.tie"
+import "./conf/conf.tie" as cfg
+import "./console/console.tie" as mgmt
+import "./ev/event_loop.tie" as evloop
+import "./http/http1.tie" as httpd
+import "./sys/net.tie"    // #cfg 门面，同上
+import "/std/args.tie" as cli
+import "/std/time.tie"    // 共享依赖（datetime 等内部裸引）：别名=单元级改名会断链，维持裸名
 
 func main() {
     // ---- 阶段 1：CLI 解析 ----
     // --config <path>：显式配置文件；缺省则探测当前目录 leibnet.td
-    var explicit = args.value("--config")
+    var explicit = cli.value("--config")
     var cfg_path = explicit
     if str_len(cfg_path) == 0 {
         cfg_path = "leibnet.td"
     }
     // ---- 阶段 2：配置装载 ----
-    var root = conf.load(cfg_path)
+    var root = cfg.load(cfg_path)
     // 显式指定的配置装载失败 → 报错退出；默认探测未命中 → 纯默认运行
     if root < 0 && str_len(explicit) > 0 {
-        println("leibnet: 配置装载失败: " + conf.last_error())
+        println("leibnet: 配置装载失败: " + cfg.last_error())
         return
     }
     // ---- 阶段 3：启动摘要 ----
     println("leibnet 0.2.0-dev")
     println("--- 配置摘要 ---")
-    print(conf.summary(root))
+    print(cfg.summary(root))
     // ---- 阶段 4：事件引擎启动（服务循环）----
-    var pport = conf.get_int(root, "server.port", 8080)
-    var doc_root = conf.get_str(root, "server.doc_root", "www")
+    var pport = cfg.get_int(root, "server.port", 8080)
+    var doc_root = cfg.get_str(root, "server.doc_root", "www")
     // console（tshell 内嵌雏形）：出厂默认开、仅本地绑定；可配置关闭（设计稿 §8）
-    if conf.console_on(root) {
-        var cport = conf.console_port(root)
-        if console.start(cport) == 0 {
+    if cfg.console_on(root) {
+        var cport = cfg.console_port(root)
+        if mgmt.start(cport) == 0 {
             println("console 就绪: 127.0.0.1:" + to_string(cport))
         } else {
             println("console: 本地监听失败（port=" + to_string(cport) + "，err=" + to_string(net.last_error()) + "）")
         }
     }
-    console.set_ctx(root, pport, doc_root)
+    mgmt.set_ctx(root, pport, doc_root)
     // http 数据面限额（判据单一来源在 conf；启动注入）
-    http1.set_limits(conf.http_max_header(root), conf.http_max_body(root), conf.http_keepalive_ms(root))
+    httpd.set_limits(cfg.http_max_header(root), cfg.http_max_body(root), cfg.http_keepalive_ms(root))
     // 虚拟主机（sites 段 → http1 路由表；无则单根回落 server.doc_root）
-    var sc = conf.site_count(root)
+    var sc = cfg.site_count(root)
     var shosts = table_new_string()
     var sroots = table_new_string()
     var sups = table_new_string()
     var si: i64 = 0
     while si < sc {
-        table_push(shosts, conf.site_host(root, si))
-        table_push(sroots, conf.site_doc_root(root, si, doc_root))
-        table_push(sups, conf.site_upstream(root, si))
+        table_push(shosts, cfg.site_host(root, si))
+        table_push(sroots, cfg.site_doc_root(root, si, doc_root))
+        table_push(sups, cfg.site_upstream(root, si))
         si = si + 1
     }
-    http1.set_sites(shosts, sroots, sups)
+    httpd.set_sites(shosts, sroots, sups)
     if sc > 0 {
         println("sites 就绪: " + to_string(sc) + " 个")
     }
-    if ev.start(pport) != 0 {
+    if evloop.start(pport) != 0 {
         println("leibnet: 监听失败（port=" + to_string(pport) + "，err=" + to_string(net.last_error()) + "）")
         return
     }
@@ -82,7 +82,7 @@ func main() {
 // 服务循环（单线程事件引擎；0.2.0：HTTP/1.1 定界健壮性 + GET/HEAD 静态 + 本地 console 分派）
 func serve_loop(doc_root: string) {
     while true {
-        var es = ev.poll(50000)
+        var es = evloop.poll(50000)
         var i: i64 = 0
         var n = len(es)
         while i + 2 < n {
@@ -91,45 +91,45 @@ func serve_loop(doc_root: string) {
             var extra = es[i + 2]
             if kind == 1 {
                 // 新服务连接：登记（空闲回收覆盖沉默连接）
-                http1.note_conn(conn)
+                httpd.note_conn(conn)
             } else if kind == 2 {
                 if extra > 0 {
-                    var data = ev.take(conn)
-                    var (st, resp) = http1.feed(conn, data, doc_root)
+                    var data = evloop.take(conn)
+                    var (st, resp) = httpd.feed(conn, data, doc_root)
                     if len(resp) > 0 {
-                        ev.send(conn, resp)
+                        evloop.send(conn, resp)
                     }
                     // st == -1：排空关闭（linger）——不立即断开，防 RST 丢弃刚发出的响应；
                     // 由 http1 排空余量、对端 FIN 或 sweep 截止回收
                 } else {
                     // 对端关闭：清残帧状态
-                    http1.forget(conn)
+                    httpd.forget(conn)
                 }
             } else if kind == 3 {
                 // 新 console 会话：欢迎语
-                ev.send(conn, console.bytes_of(console.greet()))
+                evloop.send(conn, mgmt.bytes_of(mgmt.greet()))
             } else if kind == 4 {
                 if extra > 0 {
-                    var cdata = ev.take(conn)
-                    var (creq, cresp) = console.feed(conn, cdata)
+                    var cdata = evloop.take(conn)
+                    var (creq, cresp) = mgmt.feed(conn, cdata)
                     if len(cresp) > 0 {
-                        ev.send(conn, console.bytes_of(cresp))
+                        evloop.send(conn, mgmt.bytes_of(cresp))
                     }
                     if creq == 1 {
-                        console.forget(conn)
-                        ev.close_conn(conn)
+                        mgmt.forget(conn)
+                        evloop.close_conn(conn)
                     }
                 } else {
                     // 对端关闭：清会话状态
-                    console.forget(conn)
+                    mgmt.forget(conn)
                 }
             }
             i = i + 3
         }
         // keep-alive 空闲回收（每轮一次；50ms 轮询粒度足够）
-        var idle = http1.sweep(time.mono_ms())
+        var idle = httpd.sweep(time.mono_ms())
         for c in idle {
-            ev.close_conn(c)
+            evloop.close_conn(c)
         }
     }
 }
