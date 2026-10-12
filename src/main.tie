@@ -59,13 +59,15 @@ func main() {
     var sc = conf.site_count(root)
     var shosts = table_new_string()
     var sroots = table_new_string()
+    var sups = table_new_string()
     var si: i64 = 0
     while si < sc {
         table_push(shosts, conf.site_host(root, si))
         table_push(sroots, conf.site_doc_root(root, si, doc_root))
+        table_push(sups, conf.site_upstream(root, si))
         si = si + 1
     }
-    http1.set_sites(shosts, sroots)
+    http1.set_sites(shosts, sroots, sups)
     if sc > 0 {
         println("sites 就绪: " + to_string(sc) + " 个")
     }

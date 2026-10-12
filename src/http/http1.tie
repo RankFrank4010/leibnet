@@ -18,6 +18,7 @@ type tie<class>
 import "/std/fs.tie" as fs
 import "/std/time.tie"
 import "/std/datetime.tie"
+import "./proxy.tie"
 
 // ---- 模块级全局（文件顶层）----
 var g_hconns: table<i64> = [];          // 活跃 http 连接（残帧表）
@@ -33,6 +34,7 @@ var g_linger_ms: i64 = 2000;            // 排空关闭 linger 上限（毫秒�
 var g_req_host: string = "";            // scan_headers 主机头输出槽（去端口）
 var g_site_hosts: table<string> = [];   // 虚拟主机模式（"" = 默认站点）
 var g_site_roots: table<string> = [];   // 对应文档根
+var g_site_ups: table<string> = [];     // 对应上游（"ip:port"；空串 = 静态站点）
 
 namespace http1 {
 
@@ -47,10 +49,12 @@ pub func set_limits(max_header: i64, max_body: i64, keepalive_ms: i64) -> i64 {
 }
 
 // 虚拟主机表注入（main 启动时从 conf 读入；空表 = 单根回退 server.doc_root）。
-// host 模式：精确匹配或 "*.后缀" 通配（大小写不敏感）；"" = 默认站点（首个生效）。
-pub func set_sites(hosts: table<string>, roots: table<string>) -> i64 {
+// host 模式：精确匹配或 "*.后缀" 通配（大小写不敏感）；"" = 默认站点（首个生效）；
+// ups 项非空 = 该站点为反代站点（upstream = "ip:port"）。
+pub func set_sites(hosts: table<string>, roots: table<string>, ups: table<string>) -> i64 {
     g_site_hosts = hosts
     g_site_roots = roots
+    g_site_ups = ups
     return 0
 }
 
@@ -535,33 +539,28 @@ func ci_ends_with(host: string, suf: string) -> bool {
     return true
 }
 
-// 解析请求主机对应文档根：首个匹配站点；无匹配 → 首个默认站点（"" host）；再无 → fallback。
-func pick_root(fallback: string) -> string {
+// 解析请求主机对应站点下标：首个匹配（精确/通配）；无匹配 → 首个默认站点（"" host）；均无 → -1。
+func pick_site() -> i64 {
     if len(g_site_hosts) == 0 {
-        return fallback
+        return -1
     }
-    var def_root: string = ""
-    var def_seen: i64 = 0
+    var def_idx: i64 = -1
     var i: i64 = 0
     var n = len(g_site_hosts)
     while i < n {
         var pat = g_site_hosts[i]
         if str_len(pat) == 0 {
-            if def_seen == 0 {
-                def_root = g_site_roots[i]
-                def_seen = 1
+            if def_idx < 0 {
+                def_idx = i
             }
         } else {
             if host_match(g_req_host, pat) {
-                return g_site_roots[i]
+                return i
             }
         }
         i = i + 1
     }
-    if def_seen == 1 {
-        return def_root
-    }
-    return fallback
+    return def_idx
 }
 
 // ---------- 请求体走查 ----------
@@ -741,6 +740,25 @@ pub func try_respond(buf: table<i64>, doc_root: string) -> (i64, table<i64>, i64
         }
     }
     var consumed = body_end
+    // 站点解析（虚拟主机 / 反代）
+    var site_idx = pick_site()
+    var root_dir = doc_root
+    var up = ""
+    if site_idx >= 0 {
+        if site_idx < len(g_site_roots) {
+            root_dir = g_site_roots[site_idx]
+        }
+        if site_idx < len(g_site_ups) {
+            up = g_site_ups[site_idx]
+        }
+    }
+    if str_len(up) > 0 {
+        // 反代站点：Expect 未完体 → 先回 100 继续；其余整请求转发（任意方法）
+        if force_close == 1 {
+            return (1, str_to_bytes("HTTP/1.1 100 Continue\r\n\r\n"), consumed0)
+        }
+        return (-1, proxy.forward(up, buf, consumed0, consumed, flags[2], g_req_host), consumed)
+    }
     // 连接语义：1.1 默认保持 / 1.0 默认关闭；Connection 头覆盖；Expect 直答后关闭
     var keep: i64 = 1
     if ver10 == 1 {
@@ -786,7 +804,6 @@ pub func try_respond(buf: table<i64>, doc_root: string) -> (i64, table<i64>, i64
     if str_len(dec) == 1 {
         fpath = "/index.html"
     }
-    var root_dir = pick_root(doc_root)
     var full = root_dir + fpath
     if !fs.exists(full) {
         return (resp_state(close_flag), err_resp(404, "Not Found", "not found\n", head_only, close_flag), consumed)

@@ -145,6 +145,26 @@ pub func site_doc_root(root: i64, i: i64, dflt: string) -> string {
     return get_str(site, "doc_root", dflt)
 }
 
+// 站点 i 的上游地址（"ip:port"；空串 = 静态站点）。
+pub func site_upstream(root: i64, i: i64) -> string {
+    if root < 0 {
+        return ""
+    }
+    var arr = config.path_get(root, "sites")
+    if arr < 0 {
+        return ""
+    }
+    var site = config.arr_at(arr, i)
+    if site < 0 {
+        return ""
+    }
+    var un = config.map_get(site, "upstream")
+    if un < 0 {
+        return ""
+    }
+    return config.str_val(un)
+}
+
 // ---------- 启动摘要 ----------
 
 // 配置摘要（启动打印；展示当前生效的关键项）。
