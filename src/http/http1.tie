@@ -1,21 +1,30 @@
 type tie<class>
-// src/http/http1.tie —— HTTP/1.1 协议面（0.1.0 最小实现：GET/HEAD + 静态文件）
+// src/http/http1.tie —— HTTP/1.1 协议面（0.2.0：请求定界与健壮性）
 // ============================================================
-// 纯函数式（可离线测试）：不解 socket；输入=字节表，输出=响应字节表。
-// 主入口 try_respond(buf, doc_root) -> (state, resp, consumed)：
-//   state：0 = 请求未完整到达（继续收）；1 = 响应已生成（发送 resp，consume consumed）；
-//          -1 = 协议错误（resp = 错误响应，consume 全部已收）。
-// 支持：GET/HEAD；keep-alive 默认（不主动关闭）；定界 = 头结束（\r\n\r\n）；
-//   路径防穿越（".." 严格拒绝）；"/" → index.html；Content-Type 按扩展名映射。
-// 不支持（0.1.0 记档）：其他方法（501）、请求 body、百分号解码、分块传输、pipeline 残帧。
+// 纯函数核（可离线测试）：try_respond(buf, doc_root) -> (state, resp, consumed)：
+//   state：0 = 请求未完整到达（继续收）；1 = 响应已生成（连接可续）；
+//          -1 = 响应已生成且连接须关闭（协议错误 / Connection: close / 405 等）。
+// 连接层（薄状态壳）：feed(conn, data, doc_root) 维护每连接残帧、循环消费完整
+//   请求（keep-alive 流水线）；返回 (state, resp_bytes)：1 = 发送后保持，
+//   -1 = 发送后关闭，0 = 无输出。forget(conn) 于连接关闭时清状态。
+// 本批（0.2.0）支持：GET/HEAD；keep-alive（1.1 默认开 / 1.0 默认关，Connection
+//   头覆盖）；查询串剥离 + 百分号解码（解码后防穿越）；头部超限 431；
+//   走私防护（Transfer-Encoding 一律 400；GET/HEAD 带 Content-Length ⇒ 响应后
+//   关闭）；非 GET/HEAD ⇒ 405 + Allow 并关闭。
+// 不支持（记档）：请求体消费、分块传输、range、gzip、keep-alive 空闲超时 —— 后续批。
 // 依赖：/std/fs.tie（读文件字节）。
 import "/std/fs.tie" as fs
+
+// ---- 模块级全局（文件顶层）----
+var g_hconns: table<i64> = [];          // 活跃 http 连接（残帧表）
+var g_hleft: table<table<i64>> = [];    // 每连接残帧缓冲
+var g_req_ver10: i64 = 0;               // parse_reqline 版本输出槽（1 = HTTP/1.0）
 
 namespace http1 {
 
 // ---------- 字节/字符串小工具 ----------
 
-// 字节区间 [a, e) → 字符串（ASCII；HTTP 头按字节安全）
+// 字节区间 [a, e) → 字符串（ASCII）
 func bytes_to_str(b: table<i64>, a: i64, e: i64) -> string {
     var sb = string_builder()
     var i = a
@@ -39,6 +48,31 @@ func str_to_bytes(s: string) -> table<i64> {
     return out
 }
 
+// 字节区间 [a, e) → 字符串（string 输入；查询串剥离用）
+func substr_bytes(s: string, a: i64, e: i64) -> string {
+    var sb = string_builder()
+    var i = a
+    var n = len(s)
+    while i < e && i < n {
+        sb_append_byte(sb, str_byte(s, i))
+        i = i + 1
+    }
+    return sb_build(sb)
+}
+
+// 单字节查找（未找到 -1；避免与 tiec interp 链的 find_char 撞名）
+func find_byte(s: string, c: i64) -> i64 {
+    var n = len(s)
+    var i: i64 = 0
+    while i < n {
+        if str_byte(s, i) == c {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
 // 4 字节序列 [c0,c1,c2,c3] 首匹配起点；未找到 -1（头结束 \r\n\r\n 定位用）
 func find_seq4(b: table<i64>, c0: i64, c1: i64, c2: i64, c3: i64) -> i64 {
     var n = len(b)
@@ -52,7 +86,105 @@ func find_seq4(b: table<i64>, c0: i64, c1: i64, c2: i64, c3: i64) -> i64 {
     return -1
 }
 
-// 字符串含 ".."（防穿越，严格拒绝）
+// ASCII 小写折叠
+func fold_lc(c: i64) -> i64 {
+    if c >= 65 && c <= 90 {
+        return c + 32
+    }
+    return c
+}
+
+// buf[a..) 处是否（大小写不敏感）匹配 ASCII 串
+func match_ci(b: table<i64>, a: i64, s: string) -> bool {
+    var n = len(b)
+    var m = len(s)
+    if a + m > n {
+        return false
+    }
+    var i: i64 = 0
+    while i < m {
+        if fold_lc(b[a + i]) != fold_lc(str_byte(s, i)) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// 行 [ls, le) 中是否含（大小写不敏感）子串
+func value_has_ci(b: table<i64>, ls: i64, le: i64, s: string) -> bool {
+    var m = len(s)
+    if m == 0 || le - ls < m {
+        return false
+    }
+    var i = ls
+    while i + m <= le {
+        var k: i64 = 0
+        var hit: i64 = 1
+        while k < m {
+            if fold_lc(b[i + k]) != fold_lc(str_byte(s, k)) {
+                hit = 0
+                k = m
+            } else {
+                k = k + 1
+            }
+        }
+        if hit == 1 {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+// 十六进制位值（非法 -1）
+func hex_val(c: i64) -> i64 {
+    if c >= 48 && c <= 57 {
+        return c - 48
+    }
+    if c >= 65 && c <= 70 {
+        return c - 55
+    }
+    if c >= 97 && c <= 102 {
+        return c - 87
+    }
+    return -1
+}
+
+// 百分号解码：返回 (状态, 解码串)；0 = OK，-1 = 非法（坏转义/NUL/控制字符）
+func pct_decode(s: string) -> (i64, string) {
+    var sb = string_builder()
+    var n = len(s)
+    var i: i64 = 0
+    while i < n {
+        var c = str_byte(s, i)
+        if c == 37 {
+            if i + 2 >= n {
+                return (-1, "")
+            }
+            var h1 = hex_val(str_byte(s, i + 1))
+            var h2 = hex_val(str_byte(s, i + 2))
+            if h1 < 0 || h2 < 0 {
+                return (-1, "")
+            }
+            var v = h1 * 16 + h2
+            if v == 0 {
+                return (-1, "")
+            }
+            sb_append_byte(sb, v)
+            i = i + 3
+        } else {
+            if c < 32 || c == 127 {
+                return (-1, "")
+            }
+            sb_append_byte(sb, c)
+            i = i + 1
+        }
+    }
+    return (0, sb_build(sb))
+}
+
+// 字符串含 ".."（防穿越；须在解码后调用）
 func has_dotdot(s: string) -> bool {
     var n = len(s)
     var i: i64 = 0
@@ -117,7 +249,24 @@ func content_type_of(path: string) -> string {
     return "application/octet-stream"
 }
 
-// 请求行解析：返回 (method_id, path, ok)；method：0=GET 1=HEAD 2=其他
+// ---------- 请求行 / 头部解析 ----------
+
+// 版本判定（请求行行尾 8 字节）：1 = HTTP/1.0；0 = HTTP/1.1；-1 = 非法
+func ver10_of(b: table<i64>, e: i64) -> i64 {
+    if e < 8 {
+        return -1
+    }
+    if match_ci(b, e - 8, "http/1.0") {
+        return 1
+    }
+    if match_ci(b, e - 8, "http/1.1") {
+        return 0
+    }
+    return -1
+}
+
+// 请求行解析：返回 (method_id, path, ok)；method：0=GET 1=HEAD 2=其他；
+// 版本写入模块槽 g_req_ver10。ok：0 = 正常，-1 = 畸形。
 func parse_reqline(b: table<i64>, hdr_end: i64) -> (i64, string, i64) {
     // 行结束（首个 \r\n 于 [0, hdr_end)）
     var e: i64 = -1
@@ -136,9 +285,9 @@ func parse_reqline(b: table<i64>, hdr_end: i64) -> (i64, string, i64) {
     // 方法
     var m: i64 = 2
     if e >= 4 && b[0] == 71 && b[1] == 69 && b[2] == 84 && b[3] == 32 {
-        m = 0                                        // "GET "
+        m = 0
     } else if e >= 5 && b[0] == 72 && b[1] == 69 && b[2] == 65 && b[3] == 68 && b[4] == 32 {
-        m = 1                                        // "HEAD "
+        m = 1
     }
     // 两个空格（method SP path SP version）
     var s1: i64 = -1
@@ -158,12 +307,57 @@ func parse_reqline(b: table<i64>, hdr_end: i64) -> (i64, string, i64) {
     if s1 < 0 || s2 < 0 {
         return (2, "", -1)
     }
+    var v10 = ver10_of(b, e)
+    if v10 < 0 {
+        return (2, "", -1)
+    }
+    g_req_ver10 = v10
     return (m, bytes_to_str(b, s1 + 1, s2), 0)
 }
 
-// 组装响应（head_only=1 时不含 body）
-func build_response(status_code: i64, reason: string, ctype: string, body: table<i64>, head_only: i64) -> table<i64> {
-    var head = "HTTP/1.1 " + to_string(status_code) + " " + reason + "\r\n" + "Content-Type: " + ctype + "\r\n" + "Content-Length: " + to_string(len(body)) + "\r\n" + "Connection: keep-alive\r\n" + "\r\n"
+// 头部行扫描（start..stop，逐 CRLF 行）：返回 [conn_close, has_te, has_cl, conn_keepalive]
+func scan_headers(b: table<i64>, start: i64, stop: i64) -> table<i64> {
+    var flags: table<i64> = [0, 0, 0, 0]
+    var ls = start
+    while ls < stop {
+        var le = stop
+        var j = ls
+        while j < stop {
+            if b[j] == 13 {
+                le = j
+                j = stop
+            } else {
+                j = j + 1
+            }
+        }
+        if match_ci(b, ls, "transfer-encoding") {
+            flags[1] = 1
+        }
+        if match_ci(b, ls, "content-length") {
+            flags[2] = 1
+        }
+        if match_ci(b, ls, "connection:") {
+            if value_has_ci(b, ls, le, "close") {
+                flags[0] = 1
+            }
+            if value_has_ci(b, ls, le, "keep-alive") {
+                flags[3] = 1
+            }
+        }
+        ls = le + 2
+    }
+    return flags
+}
+
+// ---------- 响应构造 ----------
+
+// 组装响应（extra = 附加头行，如 Allow；须自带 CRLF 或以空串传入）
+func build_response(status_code: i64, reason: string, ctype: string, body: table<i64>, head_only: i64, close_flag: i64, extra: string) -> table<i64> {
+    var conn_str = "keep-alive"
+    if close_flag == 1 {
+        conn_str = "close"
+    }
+    var head = "HTTP/1.1 " + to_string(status_code) + " " + reason + "\r\n" + "Server: leibnet/0.2.0-dev\r\n" + "Content-Type: " + ctype + "\r\n" + "Content-Length: " + to_string(len(body)) + "\r\n" + "Connection: " + conn_str + "\r\n" + extra + "\r\n"
     var out = str_to_bytes(head)
     if head_only == 0 {
         for x in body {
@@ -172,6 +366,21 @@ func build_response(status_code: i64, reason: string, ctype: string, body: table
     }
     return out
 }
+
+// 错误响应小包装（text/plain）
+func err_resp(status_code: i64, reason: string, msg: string, head_only: i64, close_flag: i64) -> table<i64> {
+    return build_response(status_code, reason, "text/plain; charset=utf-8", str_to_bytes(msg), head_only, close_flag, "")
+}
+
+// 关闭标志 → 状态（-1 = 响应后关闭；1 = 保持）
+func resp_state(close_flag: i64) -> i64 {
+    if close_flag == 1 {
+        return -1
+    }
+    return 1
+}
+
+// ---------- 纯函数核 ----------
 
 // 主入口（状态约定见文件头）
 pub func try_respond(buf: table<i64>, doc_root: string) -> (i64, table<i64>, i64) {
@@ -183,30 +392,172 @@ pub func try_respond(buf: table<i64>, doc_root: string) -> (i64, table<i64>, i64
     var consumed = hdr_end + 4
     var (method, path, pok) = parse_reqline(buf, hdr_end)
     if pok != 0 {
-        return (-1, build_response(400, "Bad Request", "text/plain; charset=utf-8", str_to_bytes("bad request\n"), 0), consumed)
+        return (-1, err_resp(400, "Bad Request", "bad request\n", 0, 1), consumed)
+    }
+    var ver10 = g_req_ver10
+    var flags = scan_headers(buf, 0, hdr_end)
+    // 走私防护：Transfer-Encoding 一律拒绝（本批未实现分块请求体）
+    if flags[1] == 1 {
+        return (-1, err_resp(400, "Bad Request", "transfer-encoding not supported\n", 0, 1), consumed)
+    }
+    // 连接语义：1.1 默认保持 / 1.0 默认关闭；Connection 头覆盖
+    var keep: i64 = 1
+    if ver10 == 1 {
+        keep = flags[3]
+    }
+    if flags[0] == 1 {
+        keep = 0
+    }
+    // GET/HEAD 不消费请求体：带 Content-Length ⇒ 响应后关闭
+    if flags[2] == 1 {
+        keep = 0
+    }
+    var head_only: i64 = 0
+    if method == 1 {
+        head_only = 1
     }
     if method == 2 {
-        return (-1, build_response(501, "Not Implemented", "text/plain; charset=utf-8", str_to_bytes("only GET/HEAD supported\n"), 0), consumed)
+        return (-1, build_response(405, "Method Not Allowed", "text/plain; charset=utf-8", str_to_bytes("method not allowed\n"), 0, 1, "Allow: GET, HEAD\r\n"), consumed)
     }
-    var hd: i64 = 0
-    if method == 1 {
-        hd = 1
+    // 路径：剥离查询串 → 百分号解码 → 校验（解码后防穿越）
+    var pure = path
+    var q = find_byte(path, 63)
+    if q >= 0 {
+        pure = substr_bytes(path, 0, q)
     }
-    if str_len(path) == 0 || str_byte(path, 0) != 47 {
-        return (-1, build_response(400, "Bad Request", "text/plain; charset=utf-8", str_to_bytes("bad path\n"), hd), consumed)
+    var (dok, dec) = pct_decode(pure)
+    if dok != 0 {
+        return (-1, err_resp(400, "Bad Request", "bad percent-encoding\n", head_only, 1), consumed)
     }
-    if has_dotdot(path) {
-        return (-1, build_response(403, "Forbidden", "text/plain; charset=utf-8", str_to_bytes("forbidden\n"), hd), consumed)
+    if str_len(dec) == 0 || str_byte(dec, 0) != 47 {
+        return (-1, err_resp(400, "Bad Request", "bad path\n", head_only, 1), consumed)
     }
-    var fpath = path
-    if str_len(path) == 1 {
+    if has_dotdot(dec) {
+        return (-1, err_resp(403, "Forbidden", "forbidden\n", head_only, 1), consumed)
+    }
+    var fpath = dec
+    if str_len(dec) == 1 {
         fpath = "/index.html"
+    }
+    var close_flag: i64 = 0
+    if keep == 0 {
+        close_flag = 1
     }
     var full = doc_root + fpath
     if !fs.exists(full) {
-        return (1, build_response(404, "Not Found", "text/plain; charset=utf-8", str_to_bytes("not found\n"), hd), consumed)
+        return (resp_state(close_flag), err_resp(404, "Not Found", "not found\n", head_only, close_flag), consumed)
     }
     var body = fs.read_bytes(full)
-    return (1, build_response(200, "OK", content_type_of(fpath), body, hd), consumed)
+    return (resp_state(close_flag), build_response(200, "OK", content_type_of(fpath), body, head_only, close_flag, ""), consumed)
+}
+
+// ---------- 连接层（残帧 + 流水线消费） ----------
+
+// 处理一段已收字节：消费全部完整请求（keep-alive 流水线），残帧留待续收。
+// 返回 (state, resp_bytes)：1 = 发送后保持；-1 = 发送后关闭；0 = 无输出。
+pub func feed(conn: i64, data: table<i64>, doc_root: string) -> (i64, table<i64>) {
+    var buf = left_get(conn)
+    for x in data {
+        table_push(buf, x)
+    }
+    var out: table<i64> = []
+    var state: i64 = 0
+    var closing: i64 = 0
+    while true {
+        var (st, resp, consumed) = try_respond(buf, doc_root)
+        if st == 0 {
+            // 头部未达即超限 ⇒ 431 并关闭
+            if len(buf) > 65536 {
+                out = merge_bytes(out, err_resp(431, "Request Header Fields Too Large", "header too large\n", 0, 1))
+                state = -1
+                closing = 1
+            }
+            break
+        }
+        out = merge_bytes(out, resp)
+        if st == -1 {
+            state = -1
+            closing = 1
+            break
+        }
+        state = 1
+        buf = slice_from(buf, consumed)
+        if len(buf) == 0 {
+            break
+        }
+    }
+    if closing == 1 {
+        forget(conn)
+    } else {
+        left_put(conn, buf)
+    }
+    return (state, out)
+}
+
+// 连接关闭：清残帧状态。
+pub func forget(conn: i64) -> i64 {
+    var i: i64 = 0
+    var n = len(g_hconns)
+    while i < n {
+        if g_hconns[i] == conn {
+            g_hconns[i] = -1
+            var nb: table<i64> = []
+            g_hleft[i] = nb
+            return 0
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// 内部：合并字节表（返回合并值；dst 保持只读——写形参会触发 COW，改动不外传）
+func merge_bytes(dst: table<i64>, src: table<i64>) -> table<i64> {
+    var m = dst
+    for x in src {
+        table_push(m, x)
+    }
+    return m
+}
+
+// 内部：丢弃前 start 字节
+func slice_from(b: table<i64>, start: i64) -> table<i64> {
+    var out: table<i64> = []
+    var n = len(b)
+    var i = start
+    while i < n {
+        table_push(out, b[i])
+        i = i + 1
+    }
+    return out
+}
+
+// 内部：残帧缓冲取（无则登记新连接）
+func left_get(conn: i64) -> table<i64> {
+    var i: i64 = 0
+    var n = len(g_hconns)
+    while i < n {
+        if g_hconns[i] == conn {
+            return g_hleft[i]
+        }
+        i = i + 1
+    }
+    table_push(g_hconns, conn)
+    var nb: table<i64> = []
+    table_push(g_hleft, nb)
+    return nb
+}
+
+// 内部：残帧缓冲写回
+func left_put(conn: i64, buf: table<i64>) -> i64 {
+    var i: i64 = 0
+    var n = len(g_hconns)
+    while i < n {
+        if g_hconns[i] == conn {
+            g_hleft[i] = buf
+            return 0
+        }
+        i = i + 1
+    }
+    return -1
 }
 }

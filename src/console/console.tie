@@ -43,7 +43,7 @@ pub func set_ctx(root: i64, pport: i64, doc_root: string) -> i64 {
 
 // 新连接欢迎语。
 pub func greet() -> string {
-    return "leibnet console 0.1.0 —— 本地控制台（help 查看命令）\n"
+    return "leibnet console 0.2.0 —— 本地控制台（help 查看命令）\n"
 }
 
 // 字符串 → 字节表（控制台文本逐字节）。
@@ -164,7 +164,7 @@ func ensure_nl(s: string) -> string {
 }
 
 func status_text() -> string {
-    var s = "leibnet 0.1.0-dev\n"
+    var s = "leibnet 0.2.0-dev\n"
     s = s + "listen      = :" + to_string(g_port) + "\n"
     s = s + "doc_root    = " + g_doc_root + "\n"
     s = s + "connections = " + to_string(ev.conn_count()) + "\n"

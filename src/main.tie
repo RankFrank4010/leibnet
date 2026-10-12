@@ -36,7 +36,7 @@ func main() {
         return
     }
     // ---- 阶段 3：启动摘要 ----
-    println("leibnet 0.1.0-dev")
+    println("leibnet 0.2.0-dev")
     println("--- 配置摘要 ---")
     print(conf.summary(root))
     // ---- 阶段 4：事件引擎启动（服务循环）----
@@ -60,7 +60,7 @@ func main() {
     serve_loop(doc_root)
 }
 
-// 服务循环（单线程事件引擎；0.1.0：GET/HEAD 静态服务 + 本地 console 分派）
+// 服务循环（单线程事件引擎；0.2.0：HTTP/1.1 定界健壮性 + GET/HEAD 静态 + 本地 console 分派）
 func serve_loop(doc_root: string) {
     while true {
         var es = ev.poll(50000)
@@ -70,14 +70,19 @@ func serve_loop(doc_root: string) {
             var kind = es[i]
             var conn = es[i + 1]
             var extra = es[i + 2]
-            if kind == 2 && extra > 0 {
-                var data = ev.take(conn)
-                var (st, resp, consumed) = http1.try_respond(data, doc_root)
-                if st == 1 || st == -1 {
-                    ev.send(conn, resp)
-                } else if len(data) > 65536 {
-                    // 请求头超限（0.1.0：简单防护，超限断开）
-                    ev.close_conn(conn)
+            if kind == 2 {
+                if extra > 0 {
+                    var data = ev.take(conn)
+                    var (st, resp) = http1.feed(conn, data, doc_root)
+                    if len(resp) > 0 {
+                        ev.send(conn, resp)
+                    }
+                    if st == -1 {
+                        ev.close_conn(conn)
+                    }
+                } else {
+                    // 对端关闭：清残帧状态
+                    http1.forget(conn)
                 }
             } else if kind == 3 {
                 // 新 console 会话：欢迎语
