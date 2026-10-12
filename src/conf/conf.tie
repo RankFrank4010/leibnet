@@ -1,13 +1,16 @@
 type tie<class>
-// src/conf.tie —— 配置装载与访问（leibnet 0.1.0）
+// src/conf/conf.tie —— 配置面模块（leibnet 0.1.0）
 // ============================================================
+// 归属：控制面横切层「td 配置」（设计稿 §3 架构 / §6 配置系统）。
 // 设计原则（设计稿 §6）：默认即大多数；一切策略皆配置且全量默认。
 // 实现：td（tie:data）解析复用 tie 生态既有配置模块（自包含纯 tie 实现；
 // 无别名引用——对齐官方 config_test/driver 用法；别名传播缺陷已于 tiec 修复
 // 2026-10-12，本项目不依赖该修复，旧 stage0 亦可编译）；
 // 默认值在访问点提供：配置文件缺省或键缺失时返回该项出厂默认。
-// 数据流：出厂默认（访问点常量）→ 配置文件（--config / 探测）→（后续）CLI 覆盖
-import "../../tie-repo/tiec/compiler/config.tie"
+// 数据流：出厂默认（访问点常量）→ 配置文件（--config / 探测）→（后续）CLI 覆盖。
+// 解耦走向：td 解析器提炼入 tlib/std 后（task #8），本模块 import 改库根别名，
+// 解除对 tiec 仓路径的引用。
+import "../../../tie-repo/tiec/compiler/config.tie"
 
 namespace conf {
 
