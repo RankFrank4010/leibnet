@@ -1,0 +1,250 @@
+type tie<class, unsafe:mem>
+// src/net_posix.tie —— POSIX（Linux）网络底座（epoll）
+// ============================================================
+// 与 src/net_win.tie 接口同名（init/listen_tcp/accept_nb/select_read/
+// recv_bytes/send_bytes/close_sock/last_error），平台差异内置：
+//   - 免初始化（无 WSAStartup）；
+//   - 非阻塞用 fcntl(F_SETFL, O_NONBLOCK)；
+//   - 就绪侦测用 epoll（模块级 epfd + 注册差集维护，零重复 syscall）；
+//   - epoll_event = packed {u32 events; u64 data}（12B，data 存 fd）。
+// 状态：**待 Linux 实测**（编写时仅以 --emit-ir 验证语法/IR 生成；
+//        errno 读取（__errno_location）与 SO_REUSEADDR 等待实测轮补充）。
+// 常量：F_SETFL=4、O_NONBLOCK=2048、EPOLLIN=1、EPOLL_CTL_ADD/DEL=1/2。
+unsafe extern fn socket(af: i32, typ: i32, proto: i32) -> i32
+unsafe extern fn bind(s: i32, addr: ptr<u8>, blen: i32) -> i32
+unsafe extern fn listen(s: i32, backlog: i32) -> i32
+unsafe extern fn accept(s: i32, addr: i64, blen: i64) -> i32
+unsafe extern fn recv(s: i32, buf: ptr<u8>, rlen: i64, flags: i32) -> i64
+unsafe extern fn send(s: i32, buf: ptr<u8>, slen: i64, flags: i32) -> i64
+unsafe extern fn close(fd: i32) -> i32
+unsafe extern fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32
+unsafe extern fn epoll_create1(flags: i32) -> i32
+unsafe extern fn epoll_ctl(epfd: i32, op: i32, fd: i32, ev: ptr<u8>) -> i32
+unsafe extern fn epoll_wait(epfd: i32, evs: ptr<u8>, maxev: i32, timeout_ms: i32) -> i32
+
+// ---- 模块级全局（文件顶层；零值即未初始化，语义正确）----
+var g_epfd: i64 = 0;        // epoll 实例（0 = 未创建；负数 = 失败）
+var g_reg: table<i64> = []; // 已注册 fd 清单（差集维护用）
+
+namespace netp {
+
+// ---------- 小工具 ----------
+
+// 表内存在性（小集合线性查找）
+func has_fd(t: table<i64>, v: i64) -> bool {
+    for x in t {
+        if x == v {
+            return true
+        }
+    }
+    return false
+}
+
+// u32 小端写（epoll_event.events）
+func le_u32_write(p: ptr<u8>, off: i64, v: i64) {
+    unsafe {
+        deref_write(ptr_add(p, off), to_u8(v & 255))
+        deref_write(ptr_add(p, off + 1), to_u8((v >> 8) & 255))
+        deref_write(ptr_add(p, off + 2), to_u8((v >> 16) & 255))
+        deref_write(ptr_add(p, off + 3), to_u8((v >> 24) & 255))
+    }
+}
+
+// u32 小端读
+func le_u32_read(p: ptr<u8>, off: i64) -> i64 {
+    var v: i64 = 0
+    unsafe {
+        v = to_i64(deref(ptr_add(p, off))) +
+            to_i64(deref(ptr_add(p, off + 1))) * 256 +
+            to_i64(deref(ptr_add(p, off + 2))) * 65536 +
+            to_i64(deref(ptr_add(p, off + 3))) * 16777216
+    }
+    return v
+}
+
+// ---------- 初始化 ----------
+
+// POSIX 免初始化。
+pub func init() -> bool {
+    return true
+}
+
+// ---------- 监听 ----------
+
+// 建立监听套接字（0.0.0.0:pport + listen + 非阻塞）；失败 -1。
+pub func listen_tcp(pport: i64) -> i64 {
+    var s: i64 = 0
+    var st: i64 = 0
+    unsafe {
+        s = to_i64(socket(2, 1, 6))
+        if s < 0 {
+            st = 1
+        } else {
+            var sa: ptr<u8> = alloc(16)
+            var z: i64 = 0
+            while z < 16 {
+                deref_write(ptr_add(sa, z), to_u8(0))
+                z = z + 1
+            }
+            deref_write(sa, to_u8(2))                                 // AF_INET = 2
+            deref_write(ptr_add(sa, 2), to_u8((pport >> 8) & 255))    // 端口大端
+            deref_write(ptr_add(sa, 3), to_u8(pport & 255))
+            if bind(to_i32(s), sa, 16) != 0 {
+                st = 2
+            } else if listen(to_i32(s), 8) != 0 {
+                st = 3
+            } else if fcntl(to_i32(s), 4, 2048) < 0 {                // F_SETFL, O_NONBLOCK
+                st = 4
+            }
+            free(sa)
+            if st != 0 {
+                close(to_i32(s))
+            }
+        }
+    }
+    if st != 0 {
+        return -1
+    }
+    return s
+}
+
+// 接受连接（非阻塞）；无连接或失败返回 -1。
+pub func accept_nb(srv: i64) -> i64 {
+    var c: i64 = -1
+    unsafe {
+        c = to_i64(accept(to_i32(srv), 0, 0))
+    }
+    return c
+}
+
+// ---------- 就绪侦测（epoll + 注册差集） ----------
+
+// 返回 handles 中就绪的句柄子集（最多 64 个）；timeout_us 微秒（0 = 立即返回）。
+pub func select_read(handles: table<i64>, timeout_us: i64) -> table<i64> {
+    var out: table<i64> = []
+    var cnt = len(handles)
+    if cnt == 0 {
+        return out
+    }
+    var ready: i64 = 0
+    unsafe {
+        if g_epfd == 0 {
+            g_epfd = to_i64(epoll_create1(0))
+        }
+        if g_epfd <= 0 {
+            return out
+        }
+        // DEL：已注册但本轮不在 handles 中
+        for r in g_reg {
+            if !has_fd(handles, r) {
+                var ev0: ptr<u8> = alloc(12)
+                le_u32_write(ev0, 0, 1)
+                le_u32_write(ev0, 4, 0)
+                epoll_ctl(to_i32(g_epfd), 2, to_i32(r), ev0)
+                free(ev0)
+            }
+        }
+        // ADD：handles 中尚未注册的
+        for h in handles {
+            if !has_fd(g_reg, h) {
+                var ev1: ptr<u8> = alloc(12)
+                le_u32_write(ev1, 0, 1)                        // EPOLLIN
+                le_u32_write(ev1, 4, h & 4294967295)           // data = fd（低 32 位）
+                epoll_ctl(to_i32(g_epfd), 1, to_i32(h), ev1)   // EPOLL_CTL_ADD
+                free(ev1)
+            }
+        }
+        // 重建注册清单（与 handles 对齐；本轮关注集之外的旧项已 DEL）
+        var nr: table<i64> = []
+        var i: i64 = 0
+        for h2 in handles {
+            if i < 64 {
+                table_push(nr, h2)
+            }
+            i = i + 1
+        }
+        g_reg = nr
+        // wait
+        var evbuf: ptr<u8> = alloc(12 * 64)
+        var tms = timeout_us / 1000
+        ready = to_i64(epoll_wait(to_i32(g_epfd), evbuf, 64, to_i32(tms)))
+        if ready > 0 {
+            if ready > 64 {
+                ready = 64
+            }
+            var g: i64 = 0
+            while g < ready {
+                table_push(out, le_u32_read(evbuf, g * 12 + 4))
+                g = g + 1
+            }
+        }
+        free(evbuf)
+    }
+    return out
+}
+
+// ---------- 收发 ----------
+
+// 接收数据（非阻塞）：返回 (字节表, 状态)；状态：1=有数据、0=对端关闭、-1=暂无/错误。
+pub func recv_bytes(s: i64, max: i64) -> (table<i64>, i64) {
+    var out: table<i64> = []
+    var st: i64 = -1
+    if max > 0 {
+        var rc: i64 = -1
+        unsafe {
+            var buf: ptr<u8> = alloc(max)
+            rc = recv(to_i32(s), buf, max, 0)
+            if rc > 0 {
+                var i: i64 = 0
+                while i < rc {
+                    table_push(out, to_i64(deref(ptr_add(buf, i))))
+                    i = i + 1
+                }
+            }
+            free(buf)
+        }
+        if rc > 0 {
+            st = 1
+        } else if rc == 0 {
+            st = 0
+        }
+    }
+    return (out, st)
+}
+
+// 发送字节表（非阻塞）；返回已发字节数（失败 -1）。
+pub func send_bytes(s: i64, data: table<i64>) -> i64 {
+    var n = len(data)
+    if n == 0 {
+        return 0
+    }
+    var rc: i64 = 0
+    unsafe {
+        var buf: ptr<u8> = alloc(n)
+        var i: i64 = 0
+        for b in data {
+            deref_write(ptr_add(buf, i), to_u8(b & 255))
+            i = i + 1
+        }
+        rc = send(to_i32(s), buf, n, 0)
+        free(buf)
+    }
+    return rc
+}
+
+// ---------- 收尾 ----------
+
+// 关闭套接字；成功 true。
+pub func close_sock(s: i64) -> bool {
+    var rc: i64 = -1
+    unsafe {
+        rc = to_i64(close(to_i32(s)))
+    }
+    return rc == 0
+}
+
+// 最近一次错误码（POSIX errno 读取待 Linux 实测轮补充；当前占位 0）。
+pub func last_error() -> i64 {
+    return 0
+}
+}

@@ -1,0 +1,281 @@
+type tie<class, unsafe:mem>
+// src/net_win.tie —— Windows 网络底座（Winsock2 extern 直绑）
+// ============================================================
+// 定位（设计稿 §3 事件引擎）：非阻塞 socket + select 就绪侦测的最小实现。
+// 接口契约：句柄 = 原生 SOCKET（i64 承载）；失败统一 -1 / 空表。
+// 凭据纪律：库内持 mem 凭据，对外全部安全函数（调用方零 unsafe）。
+// 平台：Windows；Linux 对应实现 src/net_posix.tie（接口同名）。
+// 实测布局：Windows fd_set = {u32 count; pad4; SOCKET[64]}（offset 8 起，520B）；
+//          FIONBIO = 0x8004667E（i32 补码 -2147195266）。
+// 参考验收：探针区 probe_event2 / echo_serve（不入库）。
+unsafe extern fn WSAStartup(wVersionRequested: u32, lpWSAData: ptr<u8>) -> i32
+unsafe extern fn socket(af: i32, typ: i32, proto: i32) -> i64
+unsafe extern fn bind(s: i64, addr: ptr<u8>, blen: i32) -> i32
+unsafe extern fn listen(s: i64, backlog: i32) -> i32
+unsafe extern fn accept(s: i64, addr: i64, blen: i64) -> i64
+unsafe extern fn ioctlsocket(s: i64, cmd: i32, argp: ptr<u8>) -> i32
+unsafe extern fn select(nfds: i32, r: ptr<u8>, w: i64, e: i64, t: ptr<u8>) -> i32
+unsafe extern fn recv(s: i64, buf: ptr<u8>, rlen: i32, flags: i32) -> i32
+unsafe extern fn send(s: i64, buf: ptr<u8>, slen: i32, flags: i32) -> i32
+unsafe extern fn closesocket(s: i64) -> i32
+unsafe extern fn WSAGetLastError() -> i32
+
+// ---- 模块级全局（文件顶层）----
+var g_wsa_ok: i64 = 0;      // WSAStartup 一次性标志（零值即未初始化，语义正确）
+
+namespace netw {
+
+// ---------- 小工具（4 字节 LE 读写；fd_set/timeval 布局用） ----------
+
+func le_u32_read(p: ptr<u8>, off: i64) -> i64 {
+    var v: i64 = 0
+    unsafe {
+        v = to_i64(deref(ptr_add(p, off))) +
+            to_i64(deref(ptr_add(p, off + 1))) * 256 +
+            to_i64(deref(ptr_add(p, off + 2))) * 65536 +
+            to_i64(deref(ptr_add(p, off + 3))) * 16777216
+    }
+    return v
+}
+
+func le_u32_write(p: ptr<u8>, off: i64, v: i64) {
+    unsafe {
+        deref_write(ptr_add(p, off), to_u8(v & 255))
+        deref_write(ptr_add(p, off + 1), to_u8((v >> 8) & 255))
+        deref_write(ptr_add(p, off + 2), to_u8((v >> 16) & 255))
+        deref_write(ptr_add(p, off + 3), to_u8((v >> 24) & 255))
+    }
+}
+
+// fd_set：清零 + 置 count（缓冲须 ≥520B）
+func fdset_clear(fds: ptr<u8>, cnt: i64) {
+    unsafe {
+        var z: i64 = 0
+        while z < 520 {
+            deref_write(ptr_add(fds, z), to_u8(0))
+            z = z + 1
+        }
+        le_u32_write(fds, 0, cnt)
+    }
+}
+
+// fd_set：写入第 i 个句柄（fd_array 从 offset 8；句柄实际 < 2^32，写低 8 字节保结构完整）
+func fdset_put(fds: ptr<u8>, i: i64, h: i64) {
+    var v = h
+    unsafe {
+        var k: i64 = 0
+        while k < 8 {
+            deref_write(ptr_add(fds, 8 + i * 8 + k), to_u8(v & 255))
+            v = v >> 8
+            k = k + 1
+        }
+    }
+}
+
+// fd_set：读回第 i 个句柄（低 4 字节；select 就绪集里的句柄即输入值）
+func fdset_get(fds: ptr<u8>, i: i64) -> i64 {
+    var v: i64 = 0
+    unsafe {
+        v = to_i64(deref(ptr_add(fds, 8 + i * 8))) +
+            to_i64(deref(ptr_add(fds, 8 + i * 8 + 1))) * 256 +
+            to_i64(deref(ptr_add(fds, 8 + i * 8 + 2))) * 65536 +
+            to_i64(deref(ptr_add(fds, 8 + i * 8 + 3))) * 16777216
+    }
+    return v
+}
+
+// ---------- 初始化 ----------
+
+// WSAStartup 一次性初始化（幂等）；成功 true。
+pub func init() -> bool {
+    if g_wsa_ok == 1 {
+        return true
+    }
+    var rc: i64 = 1
+    unsafe {
+        var wsa: ptr<u8> = alloc(512)
+        rc = to_i64(WSAStartup(514, wsa))
+        free(wsa)
+    }
+    if rc == 0 {
+        g_wsa_ok = 1
+        return true
+    }
+    return false
+}
+
+// ---------- 监听 ----------
+
+// 建立监听套接字（0.0.0.0:pport + listen + 非阻塞）；失败 -1（错误见 last_error）。
+pub func listen_tcp(pport: i64) -> i64 {
+    if !init() {
+        return -1
+    }
+    var s: i64 = 0
+    var st: i64 = 0
+    unsafe {
+        s = socket(2, 1, 6)
+        if s == -1 {
+            st = 1
+        } else {
+            var sa: ptr<u8> = alloc(16)
+            var z: i64 = 0
+            while z < 16 {
+                deref_write(ptr_add(sa, z), to_u8(0))
+                z = z + 1
+            }
+            deref_write(sa, to_u8(2))                      // AF_INET = 2
+            deref_write(ptr_add(sa, 2), to_u8((pport >> 8) & 255))  // 端口大端
+            deref_write(ptr_add(sa, 3), to_u8(pport & 255))
+            if bind(s, sa, 16) != 0 {
+                st = 2
+            } else if listen(s, 8) != 0 {
+                st = 3
+            } else {
+                var mode: ptr<u8> = alloc(4)
+                deref_write(mode, to_u8(1))
+                deref_write(ptr_add(mode, 1), to_u8(0))
+                deref_write(ptr_add(mode, 2), to_u8(0))
+                deref_write(ptr_add(mode, 3), to_u8(0))
+                if ioctlsocket(s, -2147195266, mode) != 0 {   // FIONBIO
+                    st = 4
+                }
+                free(mode)
+            }
+            free(sa)
+            if st != 0 {
+                closesocket(s)
+            }
+        }
+    }
+    if st != 0 {
+        return -1
+    }
+    return s
+}
+
+// 接受连接（非阻塞）；无连接或失败返回 -1。
+pub func accept_nb(srv: i64) -> i64 {
+    var c: i64 = -1
+    unsafe {
+        c = accept(srv, 0, 0)
+    }
+    return c
+}
+
+// ---------- 就绪侦测 ----------
+
+// select 只读就绪侦测：返回 handles 中就绪的句柄子集（最多 64 个）；
+// timeout_us 微秒（0 = 立即返回）。
+pub func select_read(handles: table<i64>, timeout_us: i64) -> table<i64> {
+    var out: table<i64> = []
+    var cnt = len(handles)
+    if cnt == 0 {
+        return out
+    }
+    if cnt > 64 {
+        cnt = 64
+    }
+    var got: i64 = 0
+    unsafe {
+        var fds: ptr<u8> = alloc(520)
+        fdset_clear(fds, cnt)
+        var i: i64 = 0
+        for h in handles {
+            if i < cnt {
+                fdset_put(fds, i, h)
+            }
+            i = i + 1
+        }
+        var tv: ptr<u8> = alloc(8)
+        var sec = timeout_us / 1000000
+        var usec = timeout_us - sec * 1000000
+        le_u32_write(tv, 0, sec)
+        le_u32_write(tv, 4, usec)
+        var rc = select(0, fds, 0, 0, tv)
+        if rc > 0 {
+            got = le_u32_read(fds, 0)
+        }
+        if got > cnt {
+            got = cnt
+        }
+        var g: i64 = 0
+        while g < got {
+            table_push(out, fdset_get(fds, g))
+            g = g + 1
+        }
+        free(fds)
+        free(tv)
+    }
+    return out
+}
+
+// ---------- 收发 ----------
+
+// 接收数据（非阻塞）：返回 (字节表, 状态)；状态：1=有数据、0=对端关闭、-1=暂无/错误。
+pub func recv_bytes(s: i64, max: i64) -> (table<i64>, i64) {
+    var out: table<i64> = []
+    var st: i64 = -1
+    if max > 0 {
+        var rc: i64 = -1
+        unsafe {
+            var buf: ptr<u8> = alloc(max)
+            rc = to_i64(recv(s, buf, max, 0))
+            if rc > 0 {
+                var i: i64 = 0
+                while i < rc {
+                    table_push(out, to_i64(deref(ptr_add(buf, i))))
+                    i = i + 1
+                }
+            }
+            free(buf)
+        }
+        if rc > 0 {
+            st = 1
+        } else if rc == 0 {
+            st = 0
+        }
+    }
+    return (out, st)
+}
+
+// 发送字节表（非阻塞）；返回已发字节数（失败 -1）。短写由调用方处理（后续版本）。
+pub func send_bytes(s: i64, data: table<i64>) -> i64 {
+    var n = len(data)
+    if n == 0 {
+        return 0
+    }
+    var rc: i64 = 0
+    unsafe {
+        var buf: ptr<u8> = alloc(n)
+        var i: i64 = 0
+        for b in data {
+            deref_write(ptr_add(buf, i), to_u8(b & 255))
+            i = i + 1
+        }
+        rc = to_i64(send(s, buf, n, 0))
+        free(buf)
+    }
+    return rc
+}
+
+// ---------- 收尾 ----------
+
+// 关闭套接字；成功 true。
+pub func close_sock(s: i64) -> bool {
+    var rc: i64 = -1
+    unsafe {
+        rc = to_i64(closesocket(s))
+    }
+    return rc == 0
+}
+
+// 最近一次 Winsock 错误码（0 = 无错误）。
+pub func last_error() -> i64 {
+    var e: i64 = 0
+    unsafe {
+        e = to_i64(WSAGetLastError())
+    }
+    return e
+}
+}
