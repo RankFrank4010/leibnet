@@ -16,3 +16,5 @@
 # 系统文件
 Thumbs.db
 .DS_Store
+# tpkg 规范
+target/
