@@ -7,7 +7,7 @@
     "kind": "backend",
     "targets": [
         "bin": "src/main.tie",            // 后端服务（server）
-        "cli": "src/console/main.tie"     // 命令行壳（内置 tshell）
+        "cli": "src/console/console.tie"  // 命令行壳（内置 tshell）
     ],
     "author": "houyangbaoxin2009",
     "license": "TPL-2.3",
