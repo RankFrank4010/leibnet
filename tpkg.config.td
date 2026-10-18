@@ -9,7 +9,10 @@
         "bin": "src/main.tie",            // 后端服务（server）
         "cli": "src/console/console.tie"  // 命令行壳（内置 tshell）
     ],
-    "author": "houyangbaoxin2009",
+    "author": "RankFrank4010",              // 所有者（仓库宿主）
+    "contributors": [
+        "houyangbaoxin2009",                // 贡献者
+    ],
     "license": "TPL-2.3",
     "dependencies": [
     ],
